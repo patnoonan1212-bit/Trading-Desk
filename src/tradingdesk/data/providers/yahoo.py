@@ -8,6 +8,10 @@ We ask for individual contract months (e.g. 'MESZ25.CME') rather than Yahoo's ro
 Agent can roll from one month to the next on volume exactly as it does with Databento history. If a contract
 symbol returns nothing, we fall back to 'MES=F' and label it with the expected front month.
 
+Yahoo turns away plain scripted requests from cloud servers (HTTP 429), so requests go through `curl_cffi`,
+which presents itself like a normal Chrome browser, after first picking up Yahoo's cookie. Without that package
+installed we fall back to Python's own HTTP client.
+
 The bar still being formed (the most recent minute) is dropped; it is picked up complete on the next run.
 """
 
@@ -65,16 +69,45 @@ class YahooProvider(HistoricalProvider):
         self.retries = retries
         self.last_trade: dict[str, pd.Timestamp] = {}
         self.used_fallback: set[str] = set()
+        self._session = None
+
+    def _browser(self):
+        """A browser-like HTTP session with Yahoo's cookie, or None if curl_cffi isn't installed."""
+        if self._session is None:
+            try:
+                from curl_cffi import requests as creq
+            except ImportError:
+                self._session = False
+                return None
+            self._session = creq.Session(impersonate="chrome")
+            try:
+                self._session.get("https://fc.yahoo.com", timeout=self.timeout)  # sets the cookie; the page itself is a 404
+            except Exception as e:
+                log.info("Yahoo cookie request failed (continuing): %s", e)
+        return self._session or None
 
     # Network access is one small method so tests can replace it.
     def _get(self, symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> dict:
         params = urllib.parse.urlencode({"interval": "1m", "period1": int(start.timestamp()), "period2": int(end.timestamp()),
                                          "includePrePost": "true"})
         last_err: Exception | None = None
+        browser = self._browser()
         for attempt in range(self.retries):
             host = HOSTS[attempt % len(HOSTS)]
-            req = urllib.request.Request(f"https://{host}/v8/finance/chart/{urllib.parse.quote(symbol)}?{params}",
-                                         headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"})
+            url = f"https://{host}/v8/finance/chart/{urllib.parse.quote(symbol)}?{params}"
+            if browser is not None:
+                try:
+                    r = browser.get(url, timeout=self.timeout)
+                    if r.status_code == 404:
+                        return {}
+                    if r.status_code == 200:
+                        return r.json()
+                    last_err = RuntimeError(f"HTTP {r.status_code}")
+                except Exception as e:
+                    last_err = e
+                time.sleep(2**attempt)
+                continue
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"})
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                     return json.loads(resp.read())

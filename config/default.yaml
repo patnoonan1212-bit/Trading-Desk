@@ -105,3 +105,14 @@ data:
 logging:
   level: INFO
   path: logs
+
+paper:
+  data_provider: yahoo            # free prices, about 10 minutes behind (real-time via Tradovate later)
+  state_path: paper-state         # where the paper account's prices, journal and status are kept
+  warmup_days: 29                 # history loaded on the first run so indicators are ready immediately
+  notify: trades                  # trades: post when trades open/close and on alerts | alerts: alerts only | none
+
+watchdog:
+  max_data_delay_minutes: 40      # alert if the newest price is older than this while the market is open
+  max_minutes_between_runs: 120   # warn if paper-trading updates are further apart than this while open
+  gap_check_hours: 6              # look for holes in the recent data this far back

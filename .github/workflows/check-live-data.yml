@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e .
+      - run: pip install -e ".[live]"
       - run: desk live check --out check.md && cat check.md >> "$GITHUB_STEP_SUMMARY"
       - name: Show the result as notes on the run
         run: grep -E '^\| M|^\*\*' check.md | head -10 | while IFS= read -r l; do echo "::notice title=Live data::$l"; done

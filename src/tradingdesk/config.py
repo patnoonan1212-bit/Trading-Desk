@@ -156,6 +156,23 @@ class Logging(BaseModel):
     path: Path = Path("logs")
 
 
+class Paper(BaseModel):
+    """Paper trading on live prices."""
+
+    data_provider: Literal["yahoo", "synthetic"] = "yahoo"
+    state_path: Path = Path("paper-state")
+    warmup_days: int = Field(29, ge=1)   # history fetched on the first run so indicators are ready from the start
+    notify: Literal["trades", "alerts", "none"] = "trades"
+
+
+class Watchdog(BaseModel):
+    """System health checks run after every paper-trading update."""
+
+    max_data_delay_minutes: int = Field(40, ge=1)        # the free feed is ~10 min behind; worry well beyond that
+    max_minutes_between_runs: int = Field(120, ge=1)     # scheduled runs can be late; warn if far apart while open
+    gap_check_hours: int = Field(6, ge=1)                # look for holes in the data this far back
+
+
 class Settings(BaseModel):
     mode: Mode = "paper"
     account: Account
@@ -168,6 +185,8 @@ class Settings(BaseModel):
     execution: Execution
     data: Data
     logging: Logging = Logging()
+    paper: Paper = Paper()
+    watchdog: Watchdog = Watchdog()
 
     @field_validator("contracts")
     @classmethod
