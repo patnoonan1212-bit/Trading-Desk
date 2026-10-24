@@ -15,9 +15,11 @@ the live system will run:
 Strategies only ever see completed bars, and orders created on a bar can only fill from the next bar, so the
 backtest never trades on information it wouldn't have had.
 
-Phase 1 applies the per-trade checks (reward-to-risk, position size, open-position count, liquidity and the
-daily break). The full Risk Manager (daily and weekly loss limits, losing streaks, correlated exposure, news
-blackouts) plugs in at the `RiskGate` step in Phase 2.
+The engine applies the per-trade checks (reward-to-risk, position size, open-position count, liquidity and the
+daily break); the Risk Manager plugs in at the `RiskGate` step; orders and fills go through the Execution Agent.
+
+The same engine runs paper trading: there it is fed live bars instead of history (see live/paper.py), and with
+`close_at_end=False` it leaves open trades open when the data runs out.
 """
 
 from __future__ import annotations
@@ -30,7 +32,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from tradingdesk.backtest.broker_sim import Bar, SimBroker
+from tradingdesk.agents.execution import Broker, ExecutionAgent
+from tradingdesk.backtest.broker_sim import Bar
 from tradingdesk.backtest.models import TradePlan, TradeRecord
 from tradingdesk.backtest.strategy import Strategy
 from tradingdesk.backtest.trade import Trade
@@ -98,7 +101,7 @@ class _Feed:
     roll: np.ndarray
     contract: np.ndarray
     session: np.ndarray
-    broker: SimBroker
+    broker: Broker
     setups: dict[int, list[tuple[int, int]]] = field(default_factory=dict)  # 1m index -> [(strategy, setup bar)]
 
     ts_ns: np.ndarray | None = None
@@ -111,12 +114,14 @@ class _Feed:
 
 class Backtester:
     def __init__(self, settings: Settings, strategies: list[Strategy], data: dict[str, pd.DataFrame], bus: EventBus | None = None,
-                 risk_gate: RiskGate | None = None, trade_from=None) -> None:
+                 risk_gate: RiskGate | None = None, trade_from=None, close_at_end: bool = True) -> None:
         self.s = settings
         self.strategies = strategies
         self.data = data
         self.bus = bus or EventBus()
         self.risk_gate = risk_gate or RiskGate()
+        self.execution = ExecutionAgent(settings, self.decide)
+        self.close_at_end = close_at_end
         # Bars before this time only warm up indicators; no trades are opened on them.
         self.trade_from_ns = None if trade_from is None else pd.Timestamp(trade_from).as_unit("ns").value
         self.realised = 0.0
@@ -127,7 +132,6 @@ class Backtester:
         self.last_atr: dict[tuple[str, str], float] = {}
         self._watch_target: list[tuple[Trade, int, str]] = []
         self._watch_reentry: list[dict] = []
-        self._logged: dict[int, int] = defaultdict(int)
 
     # ----- context used by strategies ------------------------------------------------------------------
     def has_trade(self, symbol: str) -> bool:
@@ -149,7 +153,6 @@ class Backtester:
     # ----- setup ---------------------------------------------------------------------------------------
     def _prepare(self) -> list[_Feed]:
         feeds = []
-        c = self.s.costs
         for root, cont in self.data.items():
             if cont.empty:
                 continue
@@ -158,7 +161,7 @@ class Backtester:
                 root=root, ts=cont.index, o=cont["open"].to_numpy(float), h=cont["high"].to_numpy(float),
                 lo=cont["low"].to_numpy(float), c=cont["close"].to_numpy(float), v=cont["volume"].to_numpy(float),
                 adj=cont["adjustment"].to_numpy(float), roll=cont["roll"].to_numpy(bool), contract=cont["contract"].to_numpy(str),
-                session=sessions_of(cont.index).to_numpy(str), broker=SimBroker(sp, c.commission_per_side, c.slippage_ticks),
+                session=sessions_of(cont.index).to_numpy(str), broker=self.execution.broker_for(sp),
             )
             for si, strat in enumerate(self.strategies):
                 htf = strat.prepare(root, resample(cont, strat.timeframe))
@@ -197,19 +200,13 @@ class Backtester:
                 last_snap = snap
 
         end_ts = max(f.ts[-1] for f in feeds)
-        for t in self.open_trades:  # close anything still open at the last price
-            if t.position:
-                price = self.last_close[t.plan.symbol]
-                pnl = (price - t.avg_entry) * t.side * t.position * t.pv
-                t.record.gross_pnl += pnl
-                t.record.commissions += t.position * t.broker.commission
-                self.realised += pnl - t.position * t.broker.commission
-                t.position = 0
-            t.close(end_ts, "end of backtest")
-            self._flush(t)
+        if self.close_at_end:
+            for t in self.open_trades:  # close anything still open at the last price
+                self.realised += self.execution.mark_to_market_close(t, self.last_close[t.plan.symbol], end_ts, "end of backtest")
+                self._flush(t)
         equity_points.append((end_ts, self.equity()))
         eq = pd.Series(dict(equity_points)).sort_index()
-        records = [t.record for t in self.trades if t.record.fills]
+        records = [t.record for t in self.trades if t.record.fills and not t.is_open]
         return BacktestResult(self.s, records, eq, self.bus.of_type(Decision), list(self.data), [s.name for s in self.strategies],
                               min(f.ts[0] for f in feeds), end_ts)
 
@@ -218,16 +215,11 @@ class Backtester:
 
         # 1. Rolling an open position costs a round trip of commission and slippage.
         if f.roll[bar.seq] and trades:
-            for t in trades:
-                if t.position:
-                    cost = t.position * (2 * f.broker.commission + 2 * f.broker.slippage(bar.session) * t.pv)
-                    t.record.roll_costs += cost
-                    self.realised -= cost
-                    t.note(bar.ts, "roll", f"Contract rolled to {bar.contract}; position carried over (cost ${cost:.2f}).")
+            self.realised -= self.execution.charge_roll(trades, bar, f.broker)
 
         # 2. Fills.
         for t in trades:
-            self._fill(t, bar)
+            self.realised += self.execution.work_orders(t, bar)
 
         # 3. Bar close: confirmations, timeouts, breakeven.
         for t in trades:
@@ -255,39 +247,8 @@ class Backtester:
             for plan in strat.on_bar(f.root, htf, k, self):
                 self._consider(plan, f, bar)
 
-    def _fill(self, t: Trade, bar: Bar) -> None:
-        b = t.broker
-        # Market orders (entries, adds, exits) fill first at the open.
-        for o in [o for o in t.orders if o.type == "market" and not o.done]:
-            fill = b.try_fill(o, bar)
-            if fill:
-                self.realised += t.on_fill(fill, bar) - fill.commission
-        if not t.is_open:
-            return
-        stop = t.working("stop")
-        partial = t.working("partial")
-        # If the stop and the profit target are both reached in the same minute, assume the stop came first.
-        if stop and b.touches(stop, bar) and bar.seq >= stop.active_from:
-            stop_qty = stop.remaining
-            fill = b.try_fill(stop, bar)
-            if fill and fill.qty < stop_qty:  # exits are never limited by volume
-                stop.filled = stop.qty
-                fill.qty = stop_qty
-                fill.commission = stop_qty * b.commission
-            if fill:
-                self.realised += t.on_fill(fill, bar) - fill.commission
-            return
-        if partial:
-            fill = b.try_fill(partial, bar)
-            if fill:
-                self.realised += t.on_fill(fill, bar) - fill.commission
-
     def _flush(self, t: Trade) -> None:
-        """Send any new notes from a trade to the decision log."""
-        n = self._logged[t.record.id]
-        for ts, action, reason in t.log[n:]:
-            self.decide("execution", action, reason, t.plan.symbol, ts, trade_id=t.record.id)
-        self._logged[t.record.id] = len(t.log)
+        self.execution.report(t)
 
     def _closed(self, t: Trade, f: _Feed, bar: Bar) -> None:
         self.risk_gate.on_trade_closed(t.record, self)

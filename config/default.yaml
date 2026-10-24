@@ -90,6 +90,7 @@ execution:
   max_reentries: 1                # one re-entry if stopped out and the setup is still valid
   min_liquidity:
     min_volume_1m: 20             # skip new entries when recent 1-minute volume is thinner than this
+  max_contracts_per_order: 100    # safety cap: the Execution Agent refuses any single order bigger than this
 
 data:
   provider: databento             # databento | synthetic (made-up data for tests and demos)

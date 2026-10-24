@@ -112,6 +112,7 @@ class Execution(BaseModel):
     stops: Stops
     max_reentries: int = Field(ge=0)
     min_liquidity: MinLiquidity
+    max_contracts_per_order: int = Field(100, ge=1)  # safety cap: the Execution Agent refuses anything bigger
 
 
 class Regime(BaseModel):
