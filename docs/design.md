@@ -79,3 +79,50 @@ switched off in the next window if it had under 20 training trades or a t-statis
 Real-time CME data costs money. Paper trading first runs on free delayed prices to prove the live plumbing
 (orders, positions, Watchdog) end to end. Before any live decision it switches to Tradovate's real-time feed,
 because delayed data can't judge fills accurately.
+
+# Phase 3
+
+## Free delayed prices from Yahoo, contract by contract
+Paper trading needs fresh prices but doesn't need them instantly, so it uses Yahoo Finance's free CME prices
+(about 10 minutes behind, last ~30 days of 1-minute bars). We ask for individual contract months (`MESZ26.CME`)
+rather than Yahoo's rolling `MES=F`, so contract rolls are handled by the same volume rule as the Databento
+history; the rolling series is only a fallback, flagged by the Watchdog. Yahoo turns away plain scripted requests
+from cloud servers, so requests go through `curl_cffi`, which looks like a normal browser. Real-time data via
+Tradovate replaces this before any live decision, because delayed prices can't judge fills precisely.
+
+## The Execution Agent sits between trades and the broker
+Orders from every trade go through `ExecutionAgent` to a `Broker`. In backtest and paper mode the broker is the
+simulated one with the cautious fill rules from Phase 1, so paper results are directly comparable with backtests.
+Before an order goes out it is checked (positive size, at most `max_contracts_per_order`, a valid price for
+stop and limit orders). Live mode can't create a broker until the Tradovate connection exists (Phase 6), on top
+of the existing rule that live mode needs the flag in the settings file and broker credentials.
+
+## Paper trading by replay
+Each update fetches new prices, then replays the whole desk over every recorded price since paper trading began.
+The recorded prices are the only state. That makes updates safe to run late, twice, or after a crash, and it
+guarantees that paper trading follows the backtest rules exactly. The cost is a few seconds per update, which
+grows slowly over months.
+
+Replay needs care in three places:
+- **Incomplete bars.** A 15-minute bar whose time isn't over when the data stops is not used yet, otherwise the
+  Scanner would see a partial bar and decide differently on the next update.
+- **Rolls.** After a roll, earlier prices are back-adjusted, so the numbers in older decision texts change even
+  though the decisions don't. Decisions are matched on what they were (time, agent, action, contract, trade),
+  and the journal keeps the original wording in real contract prices.
+- **Settings changes.** Replaying with new settings can change past decisions. The kill switch is applied only
+  from the newest price seen before it was turned on, so it never rewrites history. Other changes are reported
+  by the Watchdog as "history changed"; the journal keeps what was originally announced.
+
+Real-money trading can't replay real orders. In Phase 6 the broker's positions and orders are the truth, and the
+Execution Agent reconciles against them.
+
+## Running on GitHub, telling you through an issue
+With no server yet, a scheduled GitHub Actions workflow runs an update every 15 minutes while the market is open.
+The paper account is kept in GitHub's Actions cache between runs (not publicly downloadable). The status page is
+the body of a "Paper trading desk" issue; trades and alerts are comments, so GitHub's own email and mobile
+notifications reach you without Telegram or another app. Phase 6 moves this to a server with proper alerts.
+
+## Market data in a public repository
+Databento data is licensed for your own use, and release files in a public repository can be downloaded by
+anyone, so the stored data file is encrypted with your Databento key (AES-256). If the key changes, download the
+data again.

@@ -34,6 +34,7 @@ jobs:
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
+      DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}  # unlocks the encrypted market data
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -44,8 +45,8 @@ jobs:
       - name: Get stored market data
         if: ${{ !inputs.synthetic }}
         run: |
-          if gh release download market-data -p data.tar.gz; then
-            tar -xzf data.tar.gz
+          if gh release download market-data -p data.tar.gz.enc; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -pass env:DATABENTO_API_KEY -in data.tar.gz.enc | tar -xz
           else
             echo "### No market data yet" >> "$GITHUB_STEP_SUMMARY"
             echo "Run the **Download market data** workflow first, or tick **Use made-up test data**." >> "$GITHUB_STEP_SUMMARY"

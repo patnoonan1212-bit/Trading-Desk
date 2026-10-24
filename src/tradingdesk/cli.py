@@ -5,6 +5,9 @@
     desk data status
     desk backtest       --symbols MES MNQ MCL MGC --start 2024-01-01 --end 2025-01-01
     desk backtest       --synthetic ...   (made-up data, no subscription needed)
+    desk walkforward    --start 2022-01-01 --end 2025-01-01
+    desk live check     (is the free delayed price feed answering?)
+    desk paper tick     (one paper-trading update: fetch prices, replay, Watchdog, status page)
 """
 
 from __future__ import annotations
@@ -194,6 +197,19 @@ def cmd_live_check(args) -> int:
     return 0
 
 
+def cmd_paper_tick(args) -> int:
+    from tradingdesk.live.paper import PaperTrader
+
+    s = _settings(args, mode="paper")
+    if args.state:
+        s.paper.state_path = Path(args.state)
+    res = PaperTrader(s).tick(args.now)
+    print(res.status_md)
+    if res.notify_md:
+        print(res.notify_md)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="desk", description="Trading desk command line")
     p.add_argument("--config", default=None, help="settings file (default: config/default.yaml)")
@@ -244,6 +260,13 @@ def main(argv: list[str] | None = None) -> int:
     lc.add_argument("--symbols", nargs="+", default=None)
     lc.add_argument("--out", default=None, help="also write the report to this file")
     lc.set_defaults(func=cmd_live_check)
+
+    pp = sub.add_parser("paper", help="paper trading on live prices")
+    psub = pp.add_subparsers(dest="paper_cmd", required=True)
+    pt = psub.add_parser("tick", help="one update: fetch prices, replay the desk, run the Watchdog, write the status page")
+    pt.add_argument("--state", default=None, help="folder for the paper account (default from config)")
+    pt.add_argument("--now", default=None, help=argparse.SUPPRESS)
+    pt.set_defaults(func=cmd_paper_tick)
 
     args = p.parse_args(argv)
     setup_logging("INFO", None)

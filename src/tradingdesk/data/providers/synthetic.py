@@ -31,7 +31,7 @@ _SESSION_VOLUME = {"us_regular": 900.0, "london": 220.0, "overnight": 60.0}
 def _globex_minutes(start: pd.Timestamp, end: pd.Timestamp) -> pd.DatetimeIndex:
     idx = pd.date_range(start.floor("min"), end, freq="1min", inclusive="left", tz="UTC")
     et = idx.tz_convert(ET)
-    dow, minute = et.dayofweek, et.hour * 60 + et.minute
+    dow, minute = et.day_of_week, et.hour * 60 + et.minute
     open_ = ~((minute >= 17 * 60) & (minute < 18 * 60))  # daily break
     open_ &= ~(dow == 5)  # Saturday
     open_ &= ~((dow == 4) & (minute >= 17 * 60))  # Friday after close

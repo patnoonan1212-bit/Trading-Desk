@@ -1,0 +1,69 @@
+# Paper trading on live (free, ~10 minute delayed) prices. Paper money only: no broker, no real orders.
+#
+# It runs by itself every 15 minutes while the futures market is open (Sunday evening to Friday evening).
+# Each run fetches new prices, replays the desk over everything recorded since paper trading started, runs the
+# Watchdog and updates the "Paper trading desk" issue (Issues tab). Trades and alerts are posted there as
+# comments, so GitHub notifies you by email or the mobile app.
+#
+# To start over with a fresh $50,000 paper account: Actions -> Paper trading -> Run workflow -> tick "Start fresh".
+# To stop new trades: set risk.kill_switch to true in config/default.yaml. To stop the runs entirely:
+# Actions -> Paper trading -> "..." -> Disable workflow.
+name: Paper trading
+on:
+  schedule:
+    - cron: "*/15 22-23 * * 0"   # Sunday evening, from the 6 pm ET open (UTC times)
+    - cron: "*/15 * * * 1-5"     # every 15 minutes, Monday to Friday
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Start fresh (new paper account; history is discarded)"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: paper-trading
+  cancel-in-progress: false
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[live]"
+      - name: Load the paper account
+        if: ${{ !inputs.reset }}
+        uses: actions/cache/restore@v4
+        with:
+          path: paper-state
+          key: paper-state-${{ github.run_id }}
+          restore-keys: paper-state-
+      - name: Update
+        run: |
+          desk paper tick > tick.log 2>&1 || (cat tick.log; exit 1)
+          cat paper-state/status.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Save the paper account
+        uses: actions/cache/save@v4
+        with:
+          path: paper-state
+          key: paper-state-${{ github.run_id }}
+      - name: Update the status issue and post news
+        run: |
+          repo="${{ github.repository }}"
+          gh api "repos/$repo/labels" -f name=paper-trading -f color=0e8a16 -f description="Paper trading desk status" >/dev/null 2>&1 || true
+          num=$(gh api "repos/$repo/issues?labels=paper-trading&state=open&per_page=1" --jq '.[0].number // empty')
+          if [ -z "$num" ]; then
+            num=$(gh api "repos/$repo/issues" -f title="📈 Paper trading desk" -F body=@paper-state/status.md -f "labels[]=paper-trading" --jq .number)
+          else
+            gh api -X PATCH "repos/$repo/issues/$num" -F body=@paper-state/status.md >/dev/null
+          fi
+          if [ -s paper-state/notify.md ]; then
+            gh api "repos/$repo/issues/$num/comments" -F body=@paper-state/notify.md >/dev/null
+          fi

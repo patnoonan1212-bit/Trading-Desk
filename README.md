@@ -14,8 +14,8 @@ the code can switch it on for you.
 |---|---|---|
 | 1 | Data Agent and backtesting engine | ✅ built and tested |
 | 2 | Scanner, Market Regime and Risk Manager agents (backtest only) | ✅ built and tested |
-| 3 | Execution Agent, paper trading on live data, Watchdog | next |
-| 4 | Head trader (Claude) and News & Sentiment agents | |
+| 3 | Execution Agent, paper trading on live data, Watchdog | ✅ built and tested |
+| 4 | Head trader (Claude) and News & Sentiment agents | next |
 | 5 | Learning Agent and dashboard | |
 | 6 | Cloud server, phone alerts, live-trading readiness | |
 
@@ -23,9 +23,9 @@ The backtests now use the real decision chain: the **Market Regime Agent** reads
 finds setups that suit it, and the **Risk Manager** can approve, shrink or veto every trade. Nothing has been
 tested on real prices yet: that needs the Databento download below.
 
-**Live data plan:** paper trading in Phase 3 starts on free delayed prices (about 10 minutes late), which is
-enough to prove the plumbing works without paying for data. Real-time prices come through Tradovate later,
-before any decision about live money.
+**Paper trading is running** on free prices that are about 10 minutes delayed (from Yahoo Finance). That is
+enough to prove the whole desk works on fresh prices without paying for data. Real-time prices come through
+Tradovate later, before any decision about live money.
 
 ## Using it (no coding needed)
 
@@ -51,7 +51,8 @@ The key is stored encrypted by GitHub. It never appears in the code or in any lo
 
 The data is checked (duplicates, impossible prices, bad prints, gaps while the market was open), cleaned,
 stitched across contract months, and stored with the repository's **market-data** release so backtests can
-reuse it for free.
+reuse it for free. Because this repository is public and the data is licensed for your use only, the stored
+file is encrypted with your Databento key.
 
 ### Run a backtest
 
@@ -76,6 +77,36 @@ guards against that:
    switched off for the next stretch.
 4. The report shows only the results from the unseen stretches, joined together. That is the honest estimate.
 
+## Paper trading (Phase 3)
+
+The desk paper trades by itself, with pretend money and the same rules as the backtests.
+
+- **Where to look:** the **Issues** tab has an issue called **📈 Paper trading desk**. Its first post is the live
+  status page: equity, open positions, results so far, the Watchdog's health checks and the latest decisions. It
+  updates every 15 minutes while the market is open (Sunday 6 pm to Friday 5 pm New York time).
+- **News comes to you:** new trades, closed trades (with profit or loss) and alerts are posted as comments on that
+  issue. GitHub then notifies you by email and in the GitHub mobile app. To get alerts only, set `paper.notify`
+  to `alerts` in the settings file; `none` turns them off.
+- **Stop new trades:** set `risk.kill_switch: true` in [`config/default.yaml`](config/default.yaml) (edit the file
+  on GitHub with the pencil icon and click **Commit changes**). Open trades are still managed and protected.
+- **Stop paper trading entirely:** **Actions → Paper trading → ⋯ → Disable workflow.**
+- **Start over:** **Actions → Paper trading → Run workflow**, tick **Start fresh**.
+- **Is the free price feed working?** **Actions → Check live data → Run workflow** shows the latest price of each
+  contract and how far behind it is.
+
+**The Watchdog** checks after every update that prices are arriving on time, there are no holes in the data,
+updates aren't being missed, every open position has its stop in place, no trade carries more risk than it was
+given, and replaying the recorded prices still gives the same decisions. Anything wrong shows on the status page,
+and serious problems are posted to you.
+
+Good to know:
+- GitHub's scheduled runs are sometimes late by several minutes. No trades are lost when that happens: each
+  update replays every recorded price in order, so the paper results are exactly what the desk would have done.
+  Only the notifications arrive later.
+- GitHub pauses scheduled runs in a repository with no activity for 60 days. Phase 6 moves the desk to its own
+  server.
+- This repository is public, so the status issue is visible to anyone. It only shows paper trades.
+
 ## Settings
 
 All limits live in [`config/default.yaml`](config/default.yaml), with a comment on every line. The main ones:
@@ -94,6 +125,8 @@ All limits live in [`config/default.yaml`](config/default.yaml), with a comment 
 | `risk.kill_switch` | false | set to true to stop all new trades immediately |
 | `risk.min_reward_risk` | 3 | only take setups with at least 3:1 potential |
 | `scanner.min_score` | 50 | only take setups scoring 50+ out of 100 |
+| `execution.max_contracts_per_order` | 100 | safety cap: any bigger order is refused |
+| `paper.notify` | trades | trades / alerts / none: what gets posted to you |
 | `sessions.entry_windows` | all | trade any time a good setup appears |
 | `costs.commission_per_side` | 0.85 | per contract, all fees included |
 

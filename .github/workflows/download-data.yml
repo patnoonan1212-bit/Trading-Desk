@@ -1,6 +1,8 @@
 # The "Download market data" button: Actions tab -> Download market data -> Run workflow.
 # Downloads CME history from Databento, checks it, and keeps it as a file attached to the
 # "market-data" release so backtests can reuse it without downloading (and paying) again.
+# This repository is public and Databento's data is licensed for your own use only, so the file is encrypted
+# with your Databento key before it is stored: nobody without the key can read it.
 name: Download market data
 on:
   workflow_dispatch:
@@ -53,8 +55,10 @@ jobs:
       - name: Get previously downloaded data
         if: ${{ !inputs.estimate_only }}
         run: |
-          gh release download market-data -p data.tar.gz || echo "No earlier data yet."
-          if [ -f data.tar.gz ]; then tar -xzf data.tar.gz && rm data.tar.gz; fi
+          gh release download market-data -p data.tar.gz.enc || echo "No earlier data yet."
+          if [ -f data.tar.gz.enc ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -pass env:DATABENTO_API_KEY -in data.tar.gz.enc | tar -xz && rm data.tar.gz.enc
+          fi
       - name: Download, check and store
         if: ${{ !inputs.estimate_only }}
         run: |
@@ -66,6 +70,6 @@ jobs:
       - name: Save the data to the market-data release
         if: ${{ !inputs.estimate_only }}
         run: |
-          tar -czf data.tar.gz data
-          gh release view market-data >/dev/null 2>&1 || gh release create market-data --title "Market data" --notes "Stored market data used by the backtest button. Updated by the Download market data workflow."
-          gh release upload market-data data.tar.gz --clobber
+          tar -cz data | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:DATABENTO_API_KEY -out data.tar.gz.enc
+          gh release view market-data >/dev/null 2>&1 || gh release create market-data --title "Market data" --notes "Encrypted market data used by the backtest buttons. Updated by the Download market data workflow."
+          gh release upload market-data data.tar.gz.enc --clobber

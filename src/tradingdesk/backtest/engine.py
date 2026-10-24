@@ -169,9 +169,12 @@ class Backtester:
                 self.setup_bars[(root, si)] = htf
                 # The 1-minute bar on which each setup bar completes (its last minute).
                 # Compare both in nanoseconds: pandas may store times at different resolutions.
-                done_at = np.searchsorted(_ns(cont.index), _ns(pd.DatetimeIndex(htf["end"])), side="left") - 1
+                ends = _ns(pd.DatetimeIndex(htf["end"]))
+                done_at = np.searchsorted(_ns(cont.index), ends, side="left") - 1
+                # A setup bar whose time isn't over when the data stops is incomplete (live data still arriving): skip it.
+                complete = ends <= _ns(cont.index[-1:])[0] + 60 * 10**9
                 for k, i in enumerate(done_at):
-                    if i >= 0:
+                    if i >= 0 and complete[k]:
                         f.setups.setdefault(int(i), []).append((si, k))
             feeds.append(f)
         return feeds

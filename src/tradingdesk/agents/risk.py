@@ -52,6 +52,8 @@ class RiskManager(RiskGate):
         self.counts: dict[str, int] = {}
         self.peak_equity = settings.account.starting_equity
         self.breaker = ""
+        # Paper trading replays its history; the kill switch then only applies from when it was switched on.
+        self.kill_switch_from_ns: int | None = None
 
     # ----- periods ---------------------------------------------------------------------------------------
     @staticmethod
@@ -83,7 +85,7 @@ class RiskManager(RiskGate):
     # ----- the checks ------------------------------------------------------------------------------------
     def check(self, plan: TradePlan, engine: Backtester, bar: Bar) -> Verdict:
         r = self.r
-        if r.kill_switch:
+        if r.kill_switch and (self.kill_switch_from_ns is None or bar.ts_ns >= self.kill_switch_from_ns):
             return self._no("Kill switch: the kill switch is on, no new trades.")
         self._roll(engine, bar.ts)
         equity = engine.equity()
