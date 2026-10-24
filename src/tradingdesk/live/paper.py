@@ -141,6 +141,7 @@ class PaperTrader:
         st = self._state()
         res = TickResult(now=now)
         first = "started_at" not in st
+        self._prev_last_bar = st.get("last_bar")
         started = now.floor("min") if first else pd.Timestamp(st["started_at"])
         last_run = None if first else pd.Timestamp(st["last_run"])
 
@@ -242,7 +243,7 @@ class PaperTrader:
         res.status_md = self._status(res, engine, gate, closed, started, calendar)
         (self.dir / "status.md").write_text(res.status_md)
         (self.dir / "notify.md").write_text("" if sent else outbox)
-        self._dashboard(res, engine, gate, closed, started, calendar, result.equity if engine else pd.Series(dtype=float))
+        self._dashboard(res, engine, gate, closed, started, calendar, result.equity if engine else pd.Series(dtype=float), data)
         if data:
             st["last_bar"] = max(c.index[-1] for c in data.values()).isoformat()
         st.update(started_at=started.isoformat(), last_run=now.isoformat(), diverged=missing, equity=round(res.equity, 2))
@@ -274,6 +275,25 @@ class PaperTrader:
     def started_at(self) -> pd.Timestamp | None:
         st = self._state()
         return pd.Timestamp(st["started_at"]) if "started_at" in st else None
+
+    def _team(self, res: TickResult, engine, data: dict, learning: dict | None) -> dict:
+        """The Agents view: what each agent is doing and what they said to each other."""
+        from tradingdesk import agents_view
+        from tradingdesk.agents.watchdog import open_minutes
+
+        newest = max((v.index[-1] for v in data.values()), default=None)
+        prices_new = newest is not None and (self._prev_last_bar is None or newest > pd.Timestamp(self._prev_last_bar))
+        counts: dict[str, int] = {}
+        for d in res.new:
+            counts[d.agent] = counts.get(d.agent, 0) + 1
+        b = self.s.broker
+        broker = "sim" if b.name == "sim" else f"Tradovate {b.environment}" + (" (dry run: writes orders down, sends nothing)" if b.dry_run else "")
+        return agents_view.build(
+            now=res.now, journal=self._journal()[-400:], new_count_by_agent=counts, checks=res.checks, data=data, engine=engine,
+            news_status=self.news.status, news_snapshot=self.news.log.snapshot_at(res.now),
+            claude_ok=self.claude.available, reasoning_on=self.s.reasoning.enabled, learning=learning, broker=broker,
+            alerts_by_email=self.alerter.configured,
+            market_open=open_minutes(self.s.contracts[0], res.now - pd.Timedelta(minutes=5), res.now) > 0, prices_new=prices_new)
 
     # ----- alerts ----------------------------------------------------------------------------------------
     @staticmethod
@@ -317,7 +337,7 @@ class PaperTrader:
         return "\n".join(lines) + "\n"
 
     # ----- writing ---------------------------------------------------------------------------------------
-    def _dashboard(self, res: TickResult, engine, gate, closed, started, calendar, equity: pd.Series) -> None:
+    def _dashboard(self, res: TickResult, engine, gate, closed, started, calendar, equity: pd.Series, data=None) -> None:
         """Write the dashboard page (site/index.html) for GitHub Pages."""
         from tradingdesk import dashboard
 
@@ -353,7 +373,8 @@ class PaperTrader:
             spend={"spent": ledger.spent(), "reviews": ledger.spent("reviews"), "news": ledger.spent("news"),
                    "budget": self.s.reasoning.monthly_budget_usd, "connected": self.claude.available},
             learning=learning, health=worst, reviews_count=counts,
-            readiness=[{"name": i.name, "passed": i.passed, "detail": i.detail} for i in res.readiness])
+            readiness=[{"name": i.name, "passed": i.passed, "detail": i.detail} for i in res.readiness],
+            team=self._team(res, engine, data or {}, learning))
         site = self.dir / "site"
         site.mkdir(parents=True, exist_ok=True)
         (site / "index.html").write_text(dashboard.render(data))

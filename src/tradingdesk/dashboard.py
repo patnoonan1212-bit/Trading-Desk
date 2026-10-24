@@ -22,7 +22,7 @@ def _num(x):
 
 def build_data(*, now, started, equity, start_equity, day_start_equity, open_risk, positions, equity_curve: pd.Series,
                closed: pd.DataFrame, reviews: dict, checks, news_snapshot, upcoming, spend: dict, learning: dict | None,
-               health: str, reviews_count: dict | None = None, readiness: list | None = None) -> dict:
+               health: str, reviews_count: dict | None = None, readiness: list | None = None, team: dict | None = None) -> dict:
     curve = equity_curve.sort_index()
     if len(curve) > 2000:  # keep the page light: hourly points are plenty for the chart
         curve = curve.resample("1h").last().dropna()
@@ -45,7 +45,7 @@ def build_data(*, now, started, equity, start_equity, day_start_equity, open_ris
         "curve": [[int(pd.Timestamp(t).timestamp() * 1000), _num(v)] for t, v in curve.items()],
         "trades": trades[-200:], "by_setup": by_setup,
         "checks": [{"name": c.name, "status": c.status, "message": c.message} for c in checks],
-        "news": news_snapshot, "upcoming": upcoming, "spend": spend, "learning": learning or {}, "reviews_count": reviews_count or {}, "readiness": readiness or [],
+        "news": news_snapshot, "upcoming": upcoming, "spend": spend, "learning": learning or {}, "reviews_count": reviews_count or {}, "readiness": readiness or [], "team": team or {},
     }
 
 
@@ -120,6 +120,88 @@ details { margin-top: 8px; font-size: 13px; } summary { cursor: pointer; color: 
 .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; white-space: nowrap; }
 ul.plain { margin: 6px 0 0; padding-left: 18px; }
 .foot { color: var(--muted); font-size: 12px; margin-top: 20px; }
+/* ----- Agents view ----- */
+:root { --k-idea: #2a78d6; --k-approve: #1baf7a; --k-veto: #eb6834; --k-order: #6250d6; --k-info: #898781; --k-alert: #d03b3b; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --k-idea: #3987e5; --k-approve: #199e70; --k-veto: #d95926; --k-order: #9085e9; } }
+:root[data-theme="dark"] { --k-idea: #3987e5; --k-approve: #199e70; --k-veto: #d95926; --k-order: #9085e9; }
+main { padding-bottom: 96px; }
+.viewtoggle { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 20;
+  display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border); box-shadow: 0 6px 24px rgba(0,0,0,.14); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.viewtoggle button { border: 0; background: transparent; color: var(--ink-2); font: 600 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 10px 18px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.viewtoggle button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.viewtoggle .live { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 var(--good); animation: ping 2s infinite; }
+[hidden] { display: none !important; }
+.team-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-top: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); font-size: 13px; color: var(--ink-2); }
+.btn { border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 7px 14px;
+  font: 600 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif; cursor: pointer; }
+.btn:hover { background: var(--page); }
+.board { position: relative; margin-top: 12px; padding: 14px; border-radius: 16px; border: 1px solid var(--border);
+  background: radial-gradient(circle at 1px 1px, var(--grid) 1px, transparent 0) 0 0 / 18px 18px, var(--surface); }
+.stages { position: relative; z-index: 1; display: grid; gap: 14px; grid-template-columns: 1fr; }
+.stage h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.stage .cards { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.stage.oversight .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Wide screens: one production line along the top (Data -> Scanner -> Risk -> Head trader -> Execution -> Broker),
+   the agents that feed it underneath, and the ones that watch over it on the bottom row. */
+@media (min-width: 1000px) {
+  .stages { grid-template-columns: repeat(6, minmax(0, 1fr)); column-gap: 46px; row-gap: 58px; padding-top: 30px; }
+  .stage, .stage .cards { display: contents; }
+  .stage h3 { display: none; }
+  #ag-data { grid-area: 1 / 1; } #ag-scanner { grid-area: 1 / 2; } #ag-risk { grid-area: 1 / 3; }
+  #ag-overseer { grid-area: 1 / 4; } #ag-execution { grid-area: 1 / 5; } #ag-broker { grid-area: 1 / 6; }
+  #ag-regime { grid-area: 2 / 2; } #ag-news { grid-area: 2 / 3; }
+  #ag-learning { grid-area: 3 / 4; } #ag-you { grid-area: 3 / 5; } #ag-watchdog { grid-area: 3 / 6; }
+}
+.agent { position: relative; text-align: left; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+  padding: 10px 11px; cursor: pointer; color: var(--ink); font: inherit; min-width: 0; transition: transform .25s, box-shadow .25s, border-color .25s, opacity .25s; }
+.agent:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.agent .top { display: flex; align-items: center; gap: 8px; }
+.agent .ico { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; background: var(--page); color: var(--ink-2); }
+.agent .name { font-weight: 650; font-size: 14px; line-height: 1.2; overflow-wrap: anywhere; }
+.agent .state { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+.agent .doing { font-size: 12px; color: var(--ink-2); margin-top: 7px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.agent .when { font-size: 11px; color: var(--muted); margin-top: 5px; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.agent[data-status="working"] { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+.agent[data-status="working"] .sdot { background: var(--good); animation: ping 2s infinite; }
+.agent[data-status="idle"] .sdot { background: var(--axis); }
+.agent[data-status="problem"] { border-color: var(--critical); }
+.agent[data-status="problem"] .sdot { background: var(--critical); }
+.agent[data-status="paused"] { border-color: color-mix(in srgb, var(--warning) 70%, var(--border)); }
+.agent[data-status="paused"] .sdot { background: var(--warning); }
+.agent[data-status="off"] { border-style: dashed; }
+.agent[data-status="off"] > * { opacity: .6; }
+.agent[data-status="off"] .sdot { background: transparent; border: 1.5px solid var(--muted); width: 7px; height: 7px; }
+.agent.selected { box-shadow: 0 0 0 2px var(--ink); }
+.agent.dim { opacity: .35; }
+.agent.recv { animation: recv .7s ease-out; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes recv { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--glow, var(--k-idea)) 55%, transparent); } 100% { box-shadow: 0 0 0 9px transparent; } }
+.wires { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: visible; }
+.wires.top { z-index: 2; }
+.wire { fill: none; stroke: var(--axis); stroke-width: 1.5; transition: stroke .3s, stroke-width .3s, opacity .3s; }
+.wire.hot { stroke: var(--ink-2); stroke-width: 2; }
+.wire.dim { opacity: .15; }
+.wlabel { font-size: 10.5px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.pulse { filter: drop-shadow(0 0 4px currentColor); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.kdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.feed { list-style: none; margin: 0; padding: 0; max-height: 520px; overflow: auto; }
+.feed li { display: grid; grid-template-columns: 64px 1fr; gap: 4px 12px; padding: 9px 4px; border-bottom: 1px solid var(--grid); transition: background .4s; }
+.feed li.flash { background: color-mix(in srgb, var(--k-idea) 10%, transparent); }
+.feed .t { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.feed .route { font-size: 12px; color: var(--ink-2); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.feed .route b { color: var(--ink); font-weight: 650; }
+.feed .msg { grid-column: 2; font-size: 13px; line-height: 1.4; }
+.ktag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); }
+.detail { margin-top: 12px; display: grid; gap: 6px; }
+.detail .row { font-size: 13px; color: var(--ink-2); } .detail .row b { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .agent, .wire { transition: none; } .sdot, .viewtoggle .live { animation: none !important; } }
 </style>
 </head>
 <body>
@@ -128,6 +210,7 @@ ul.plain { margin: 6px 0 0; padding-left: 18px; }
     <h1>Trading desk <span class="sub">· paper money</span></h1>
     <div class="sub" id="updated"></div>
   </header>
+  <div id="view-dash">
   <div id="health" class="sub"></div>
   <section class="tiles" id="tiles"></section>
 
@@ -182,8 +265,41 @@ ul.plain { margin: 6px 0 0; padding-left: 18px; }
     <div id="learning"></div>
   </section>
 
+  </div>
+  <div id="view-agents" hidden>
+    <div class="team-head">
+      <div>
+        <h2 style="margin:0">The team</h2>
+        <div class="sub" id="team-sub"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="chip" id="market-chip"></span>
+        <button class="btn" id="replay" type="button">▶ Replay last update</button>
+      </div>
+    </div>
+    <figure style="margin:0">
+      <div class="board" id="board">
+        <svg class="wires" id="wires" aria-hidden="true"></svg>
+        <div class="stages" id="stages"></div>
+        <svg class="wires top" id="wires-top" aria-hidden="true"></svg>
+      </div>
+      <figcaption class="sub" style="margin-top:8px">How a trade travels: prices and news come in, the Regime Agent and Scanner find an idea, the Risk Manager
+        and head trader decide, and Execution places it. Moving dots are messages between agents. Tap an agent to see only its messages.</figcaption>
+    </figure>
+    <div class="legend" id="legend"></div>
+    <section class="card">
+      <h2 id="feed-title">Conversation</h2>
+      <div class="detail" id="detail" hidden></div>
+      <ul class="feed" id="feed"></ul>
+    </section>
+  </div>
+
   <p class="foot">Paper trading with prices about 10 minutes delayed. Same rules and fill model as the backtests. Updated automatically.</p>
 </main>
+<nav class="viewtoggle" aria-label="Switch view">
+  <button type="button" id="btn-dash" aria-pressed="true">Dashboard</button>
+  <button type="button" id="btn-agents" aria-pressed="false"><span class="live"></span>Agents</button>
+</nav>
 <script>
 const D = __DATA__;
 const $ = (id) => document.getElementById(id);
@@ -358,7 +474,7 @@ function drawCharts() {
 drawCharts();
 let lastW = document.body.clientWidth;
 new ResizeObserver(() => { if (Math.abs(document.body.clientWidth - lastW) > 20) { lastW = document.body.clientWidth; drawCharts(); } }).observe(document.body);
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawCharts);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { drawCharts(); window.__drawWires && window.__drawWires(); });
 
 // ----- tables -----
 const daily = []; { let lastDay = ""; D.curve.forEach(([t, v]) => { const day = new Date(t).toLocaleDateString(); if (day !== lastDay) { daily.push([t, v]); lastDay = day; } else daily[daily.length - 1] = [t, v]; }); }
@@ -448,6 +564,239 @@ table($("checks"), [{label: "Status", get: r => statusBadge(r.status)}, {label: 
     table(wrap, [{label: "Area", get: g => g.area}, {label: "Group", get: g => g.name.replaceAll("_", " ")}, {label: "Trades", n: 1, get: g => g.trades},
       {label: "Avg R", n: 1, get: g => rfmt(g.exp_r)}, {label: "Verdict", get: g => g.verdict}], groups, "");
   }
+})();
+
+// ===================== Agents view =====================
+(function team() {
+  const T = D.team || {};
+  const agents = T.agents || [], edges = T.edges || [], msgs = T.messages || [];
+  const byId = Object.fromEntries(agents.map(a => [a.id, a]));
+  const KIND = {idea: ["Trade idea", "--k-idea"], approve: ["Approval", "--k-approve"], veto: ["Veto", "--k-veto"],
+                order: ["Order", "--k-order"], info: ["Update", "--k-info"], alert: ["⚠ Alert", "--k-alert"]};
+  const STATE = {working: "Working", idle: "Idle", problem: "Problem", off: "Off", paused: "Paused new trades"};
+  // Lines that would run behind another card on wide screens arch over the top row instead.
+  const ARCS = new Set(["risk>execution", "overseer>scanner"]);
+  const GROUPS = [["inputs", "Inputs"], ["analysis", "Analysis"], ["decision", "Decision"], ["action", "Action"], ["oversight", "Oversight"]];
+  const ICONS = {
+    data: "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zm0 0v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+    news: "M5 4h11v16H6a2 2 0 0 1-2-2V5a1 1 0 0 1 1-1zm11 4h3v10a2 2 0 0 1-2 2M8 8h5M8 12h5M8 16h3",
+    regime: "M3 16c3 0 3-8 6-8s3 8 6 8 3-8 6-8M3 20h18",
+    scanner: "M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0-16 0M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 12l6-6",
+    risk: "M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6zM9 12l2 2 4-4",
+    overseer: "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM18 16l.8 2.2L21 19l-2.2.8L18 22l-.8-2.2L15 19l2.2-.8z",
+    execution: "M13 3L5 14h6l-1 7 8-11h-6z",
+    broker: "M3 9l9-5 9 5M5 9v9M10 9v9M14 9v9M19 9v9M3 20h18",
+    watchdog: "M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12zM12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0",
+    learning: "M3 8l9-4 9 4-9 4zM7 10v5c0 1.7 2.2 3 5 3s5-1.3 5-3v-5",
+    you: "M12 8m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0M4 21c0-4 3.6-7 8-7s8 3 8 7",
+  };
+  if (!agents.length) return;
+
+  // ----- cards -----
+  const stages = $("stages");
+  GROUPS.forEach(([g, label]) => {
+    const st = el("div", {class: "stage " + g}), cards = el("div", {class: "cards"});
+    st.append(el("h3", {}, label), cards);
+    agents.filter(a => a.group === g).forEach(a => {
+      const b = el("button", {class: "agent", id: "ag-" + a.id, "data-status": a.status, type: "button", "aria-pressed": "false"});
+      const ico = el("span", {class: "ico"});
+      const svg = svgEl("svg", {width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 1.7,
+                                "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true"});
+      svg.append(svgEl("path", {d: ICONS[a.id] || ICONS.data}));
+      ico.append(svg);
+      const head = el("div", {style: "min-width:0"});
+      const state = el("div", {class: "state"});
+      state.append(el("span", {class: "sdot"}), document.createTextNode(STATE[a.status] || a.status));
+      head.append(el("div", {class: "name"}, a.name), state);
+      const top = el("div", {class: "top"}); top.append(ico, head);
+      b.append(top, el("div", {class: "doing"}, a.doing), el("div", {class: "when"}, "Last message: " + a.last));
+      b.addEventListener("click", () => select(selected === a.id ? null : a.id));
+      cards.append(b);
+    });
+    stages.append(st);
+  });
+
+  // ----- wires between cards -----
+  const svg = $("wires"), top = $("wires-top"), board = $("board");
+  let paths = {};
+  function anchor(r, side, box) {
+    const x = r.left - box.left, y = r.top - box.top;
+    return {left: [x, y + r.height / 2], right: [x + r.width, y + r.height / 2], top: [x + r.width / 2, y], bottom: [x + r.width / 2, y + r.height]}[side];
+  }
+  function drawWires() {
+    svg.replaceChildren(); top.replaceChildren(); paths = {};
+    const box = board.getBoundingClientRect();
+    svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+    top.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+    const wide = box.width >= 960, showLabels = wide;
+    edges.forEach(e => {
+      const A = $("ag-" + e.from), B = $("ag-" + e.to);
+      if (!A || !B) return;
+      const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
+      const ca = [ra.left + ra.width / 2, ra.top + ra.height / 2], cb = [rb.left + rb.width / 2, rb.top + rb.height / 2];
+      const dx = cb[0] - ca[0], dy = cb[1] - ca[1];
+      let p1, p2, c1, c2;
+      if (wide && ARCS.has(e.from + ">" + e.to)) {
+        p1 = anchor(ra, "top", box); p2 = anchor(rb, "top", box);
+        const lift = Math.min(p1[1], p2[1]) - 26;
+        c1 = [p1[0], lift]; c2 = [p2[0], lift];
+      } else if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+        p1 = anchor(ra, dx > 0 ? "right" : "left", box); p2 = anchor(rb, dx > 0 ? "left" : "right", box);
+        const k = Math.max(30, Math.abs(p2[0] - p1[0]) * 0.45) * Math.sign(dx);
+        c1 = [p1[0] + k, p1[1]]; c2 = [p2[0] - k, p2[1]];
+      } else {
+        p1 = anchor(ra, dy > 0 ? "bottom" : "top", box); p2 = anchor(rb, dy > 0 ? "top" : "bottom", box);
+        const k = Math.max(24, Math.abs(p2[1] - p1[1]) * 0.45) * Math.sign(dy || 1);
+        c1 = [p1[0], p1[1] + k]; c2 = [p2[0], p2[1] - k];
+      }
+      const d = `M${p1[0]},${p1[1]} C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`;
+      const path = svgEl("path", {d, class: "wire", "data-from": e.from, "data-to": e.to});
+      svg.append(path);
+      paths[e.from + ">" + e.to] = path;
+      // small arrowhead at the target end
+      const L = path.getTotalLength(), q = path.getPointAtLength(Math.max(0, L - 7)), end = path.getPointAtLength(L);
+      const ang = Math.atan2(end.y - q.y, end.x - q.x), s = 5;
+      const pts = [[end.x, end.y], [end.x - s * Math.cos(ang - 0.5), end.y - s * Math.sin(ang - 0.5)], [end.x - s * Math.cos(ang + 0.5), end.y - s * Math.sin(ang + 0.5)]];
+      svg.append(svgEl("polygon", {points: pts.map(p => p.join(",")).join(" "), fill: css("--axis"), class: "head", "data-from": e.from, "data-to": e.to}));
+      if (showLabels) {
+        const mid = path.getPointAtLength(L / 2);
+        const t = svgEl("text", {x: mid.x, y: mid.y - 5, "text-anchor": "middle", class: "wlabel"});
+        t.textContent = e.label; top.append(t);
+      }
+    });
+    applySelection();
+    markHot();
+  }
+  function markHot() {
+    const fresh = msgs.filter(m => m.fresh);
+    Object.values(paths).forEach(p => p.classList.remove("hot"));
+    fresh.forEach(m => { const p = paths[m.from + ">" + m.to] || paths[m.to + ">" + m.from]; if (p) p.classList.add("hot"); });
+  }
+
+  // ----- pulses -----
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function pulse(m) {
+    return new Promise(resolve => {
+      const fwd = paths[m.from + ">" + m.to], back = paths[m.to + ">" + m.from], path = fwd || back;
+      const target = $("ag-" + m.to);
+      const color = css((KIND[m.kind] || KIND.info)[1]);
+      const done = () => {
+        if (target) { target.style.setProperty("--glow", color); target.classList.remove("recv"); void target.offsetWidth; target.classList.add("recv"); }
+        resolve();
+      };
+      if (!path || reduce) { setTimeout(done, reduce ? 150 : 300); return; }
+      const L = path.getTotalLength(), dot = svgEl("circle", {r: 5, fill: color, stroke: css("--surface"), "stroke-width": 2, class: "pulse"});
+      dot.style.color = color;
+      top.append(dot);
+      const t0 = performance.now(), dur = 900;
+      (function step(t) {
+        const k = Math.min(1, (t - t0) / dur), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        const pt = path.getPointAtLength((fwd ? e : 1 - e) * L);
+        dot.setAttribute("cx", pt.x); dot.setAttribute("cy", pt.y);
+        if (k < 1) requestAnimationFrame(step); else { dot.remove(); done(); }
+      })(t0);
+    });
+  }
+  let playing = false;
+  async function replay() {
+    if (playing) return;
+    playing = true; $("replay").textContent = "Playing…";
+    let list = msgs.filter(m => m.fresh);
+    if (!list.length) list = msgs.slice(-10);
+    for (const m of list) {
+      const li = document.querySelector(`#feed li[data-i="${msgs.indexOf(m)}"]`);
+      if (li) { li.classList.add("flash"); setTimeout(() => li.classList.remove("flash"), 1400); }
+      await pulse(m);
+    }
+    playing = false; $("replay").textContent = "▶ Replay last update";
+  }
+  $("replay").addEventListener("click", replay);
+
+  // ----- feed and selection -----
+  let selected = null;
+  function renderFeed() {
+    const feed = $("feed"); feed.replaceChildren();
+    const list = msgs.map((m, i) => [m, i]).filter(([m]) => !selected || m.from === selected || m.to === selected).reverse();
+    $("feed-title").textContent = selected ? `${byId[selected].name}: messages` : "Conversation";
+    if (!list.length) {
+      feed.append(el("li", {}, selected ? "No messages from or to this agent yet." :
+        "No messages yet. When the market is open, every update's conversation appears here."));
+      return;
+    }
+    list.forEach(([m, i]) => {
+      const li = el("li", {"data-i": String(i)});
+      const d = new Date(m.ts);
+      li.append(el("span", {class: "t"}, d.toLocaleDateString(undefined, {month: "short", day: "numeric"}) + "\n" +
+        d.toLocaleTimeString(undefined, {hour: "2-digit", minute: "2-digit", hour12: false})));
+      const route = el("div", {class: "route"});
+      const [klabel, kvar] = KIND[m.kind] || KIND.info;
+      const tag = el("span", {class: "ktag"}); const kd = el("span", {class: "kdot"}); kd.style.background = css(kvar);
+      tag.append(kd, document.createTextNode(klabel));
+      route.append(el("b", {}, (byId[m.from] || {name: m.from}).name), document.createTextNode("→"), el("b", {}, (byId[m.to] || {name: m.to}).name), tag);
+      if (m.fresh) route.append(el("span", {class: "ktag"}, "this update"));
+      li.append(route, el("div", {class: "msg"}, m.text));
+      li.querySelector(".t").style.whiteSpace = "pre-line";
+      feed.append(li);
+    });
+  }
+  function applySelection() {
+    agents.forEach(a => {
+      const c = $("ag-" + a.id); if (!c) return;
+      const linked = !selected || a.id === selected || edges.some(e => (e.from === selected && e.to === a.id) || (e.to === selected && e.from === a.id));
+      c.classList.toggle("selected", a.id === selected); c.classList.toggle("dim", !linked);
+      c.setAttribute("aria-pressed", String(a.id === selected));
+    });
+    svg.querySelectorAll(".wire, .head").forEach(w => {
+      const on = !selected || w.dataset.from === selected || w.dataset.to === selected;
+      w.classList.toggle("dim", !on);
+    });
+    const det = $("detail");
+    if (selected) {
+      const a = byId[selected]; det.hidden = false; det.replaceChildren();
+      [["Job", a.job], ["Now", a.doing], ["Status", STATE[a.status] || a.status], ["Last message", a.last]].forEach(([k, v]) => {
+        const r = el("div", {class: "row"}); r.append(el("b", {}, k + ": "), document.createTextNode(v)); det.append(r);
+      });
+    } else det.hidden = true;
+  }
+  function select(id) { selected = id; applySelection(); renderFeed(); }
+
+  // ----- header, legend -----
+  const working = agents.filter(a => a.status === "working").length, problems = agents.filter(a => a.status === "problem").length;
+  $("team-sub").textContent = `${working} working · ${problems} with a problem · as of ${fmtTime(D.now)} (the desk updates every 15 minutes on GitHub)`;
+  const chip = $("market-chip"); const dot = el("span", {class: "sdot"});
+  dot.style.background = css(T.market_open ? "--good" : "--axis");
+  chip.append(dot, document.createTextNode(T.market_open ? "Market open" : "Market closed: agents are resting"));
+  const lg = $("legend");
+  Object.values(KIND).forEach(([label, v]) => { const s = el("span"); const d = el("span", {class: "kdot"}); d.style.background = css(v); s.append(d, document.createTextNode(label)); lg.append(s); });
+
+  renderFeed();
+  window.__drawWires = drawWires;
+  window.__replayTeam = replay;
+})();
+
+// ===================== the view toggle =====================
+(function views() {
+  const dash = $("view-dash"), team = $("view-agents"), bd = $("btn-dash"), bt = $("btn-agents");
+  let first = true;
+  function show(v) {
+    const agents = v === "agents";
+    dash.hidden = agents; team.hidden = !agents;
+    bd.setAttribute("aria-pressed", String(!agents)); bt.setAttribute("aria-pressed", String(agents));
+    try { localStorage.setItem("desk-view", v); } catch (e) { /* storage may be blocked */ }
+    if (agents) {
+      requestAnimationFrame(() => { window.__drawWires && window.__drawWires(); if (first) { first = false; setTimeout(() => window.__replayTeam && window.__replayTeam(), 400); } });
+    } else drawCharts();
+    if (location.hash !== "#" + v) history.replaceState(null, "", "#" + v);
+  }
+  bd.addEventListener("click", () => show("dash"));
+  bt.addEventListener("click", () => show("agents"));
+  let start = location.hash === "#agents" ? "agents" : location.hash === "#dash" ? "dash" : null;
+  if (!start) { try { start = localStorage.getItem("desk-view"); } catch (e) { start = null; } }
+  show(start === "agents" ? "agents" : "dash");
+  let w = innerWidth;
+  addEventListener("resize", () => { if (!team.hidden && Math.abs(innerWidth - w) > 10) { w = innerWidth; window.__drawWires(); } });
+  // Stay current: reload every 5 minutes while the page is open and visible.
+  setInterval(() => { if (document.visibilityState === "visible") location.reload(); }, 5 * 60 * 1000);
 })();
 </script>
 </body>
