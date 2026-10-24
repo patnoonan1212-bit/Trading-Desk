@@ -99,6 +99,10 @@ def test_review_writes_report_and_json(settings, tmp_path):
     assert "12 closed paper trades" in md and "None this week" in md
     assert json.loads((tmp_path / "learning" / "latest.json").read_text())["trades"] == 12
     assert "Nothing to learn" in report_markdown(LearningAgent(settings).review(None, None))
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    pd.DataFrame().to_csv(empty / "trades.csv", index=False)   # paper trading with no closed trades yet
+    assert "Nothing to learn" in report_markdown(LearningAgent(settings).review(None, empty))
 
 
 def test_dashboard_page_is_self_contained_and_safe():

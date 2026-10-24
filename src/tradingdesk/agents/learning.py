@@ -351,7 +351,7 @@ class LearningAgent:
             parts.append(trades.assign(source="history"))
             sources.append(f"backtest on history {start:%Y-%m-%d} to {test_from:%Y-%m-%d} (the rest, to {end:%Y-%m-%d}, is kept back for testing)")
         paper_dir = Path(paper_dir) if paper_dir else None
-        if paper_dir and (paper_dir / "trades.csv").exists():
+        if paper_dir and (paper_dir / "trades.csv").exists() and (paper_dir / "trades.csv").stat().st_size > 2:
             pt = pd.read_csv(paper_dir / "trades.csv")
             if len(pt):
                 parts.append(pt.assign(source="paper"))
