@@ -1,0 +1,72 @@
+# Trading Desk settings. Every risk limit, session, contract and the trading mode live here.
+# Change values in this file (or in a copy passed with --config); no code changes needed.
+
+# backtest | paper | live
+# paper is the default. live only works if you set it here yourself AND broker credentials exist.
+mode: paper
+
+account:
+  starting_equity: 50000        # USD
+
+risk:
+  risk_per_trade_pct: 1.5       # max loss if the stop is hit, across ALL scale-in entries combined
+  max_daily_loss_pct: 4.0       # stop opening trades for the rest of the day
+  max_consecutive_losses: 3     # stop opening trades for the rest of the day
+  max_weekly_drawdown_pct: 8.0  # pause trading and alert you
+  max_open_positions: 3
+  correlated_groups:            # contracts that move together share one risk budget
+    - name: us_equity_index
+      symbols: [MES, MNQ]
+      max_combined_risk_pct: 2.0
+  min_reward_risk: 3.0          # scanner only passes setups with at least 3:1 potential
+  news_blackout_minutes: 10     # no new entries this long before and after high-impact news (Phase 4)
+
+contracts: [MES, MNQ, MCL, MGC]
+
+sessions:
+  timezone: America/New_York
+  # Trade any time a good setup appears. A liquidity check still applies (see execution.min_liquidity).
+  # To limit trading to certain windows, list them here, e.g. [{name: london, start: "03:00", end: "05:00"}].
+  entry_windows: all
+  daily_break: {start: "17:00", end: "18:00"}   # CME maintenance break, no new orders
+
+costs:
+  commission_per_side: 0.85     # USD per contract per side, all-in (broker + exchange + NFA fees). Check your Tradovate plan.
+  slippage_ticks:               # assumed slippage on market and stop orders, per side
+    us_regular: 1
+    london: 1
+    overnight: 2
+
+execution:
+  scale_in:
+    min_contracts_for_thirds: 3   # below this the trade is entered once, after confirmation
+    starter_fraction: 0.3333
+    confirm_timeframe: 1m
+    confirm_timeout_bars: 10      # starter is closed if confirmation doesn't come within this many confirm bars
+  exits:
+    partial_at_r: 2.0             # take partial profit at 2R ...
+    partial_fraction: 0.3333      # ... of this fraction of the position
+    breakeven_at_r: 2.0           # and move the stop to breakeven
+    trail:
+      method: atr                 # atr | swing
+      atr_period: 14
+      atr_multiple: 3.0
+  stops:
+    atr_buffer: 0.25              # stops go beyond swing highs/lows plus this many ATRs
+  max_reentries: 1                # one re-entry if stopped out and the setup is still valid
+  min_liquidity:
+    min_volume_1m: 20             # skip new entries when recent 1-minute volume is thinner than this
+
+data:
+  provider: databento             # databento | synthetic (made-up data for tests and demos)
+  dataset: GLBX.MDP3              # CME Globex
+  store_path: data
+  default_schema: ohlcv-1m        # 1-minute bars; trades (tick) is supported but much larger
+  max_cost_usd_per_download: 5.0  # refuse a download that would cost more than this
+  roll:
+    method: volume                # switch to the next contract when its volume overtakes the current one
+    confirm_days: 1               # ... for this many sessions in a row
+
+logging:
+  level: INFO
+  path: logs

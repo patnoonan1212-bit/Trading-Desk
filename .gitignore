@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+# Market data and run output stay out of git (they are large and can be re-downloaded).
+data/
+reports/
+logs/
+.env
