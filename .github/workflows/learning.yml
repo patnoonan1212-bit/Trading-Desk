@@ -29,7 +29,7 @@ jobs:
           cache: pip
       - run: pip install -e .
       - name: Load the paper account
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: paper-state
           key: paper-state-learning-${{ github.run_id }}

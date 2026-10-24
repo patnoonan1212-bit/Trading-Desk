@@ -58,7 +58,7 @@ jobs:
             --strategy ${{ inputs.strategy }} --equity ${{ inputs.equity }} --out report --rebuild \
             ${{ inputs.synthetic && '--synthetic' || '' }} > backtest.log 2>&1 || (cat backtest.log; exit 1)
           cat report/report.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: backtest-report
           path: |

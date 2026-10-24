@@ -57,7 +57,7 @@ jobs:
       - run: pip install -e ".[live,ai,tradovate]"
       - name: Load the paper account
         if: ${{ !inputs.reset }}
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: paper-state
           key: paper-state-${{ github.run_id }}
@@ -67,7 +67,7 @@ jobs:
           desk paper tick > tick.log 2>&1 || (cat tick.log; exit 1)
           cat paper-state/status.md >> "$GITHUB_STEP_SUMMARY"
       - name: Save the paper account
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: paper-state
           key: paper-state-${{ github.run_id }}
@@ -91,7 +91,7 @@ jobs:
           if [ -s paper-state/notify.md ] || [ "$(date -u +%M)" -lt 15 ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: steps.publish.outputs.publish == 'true'
         with:
           path: paper-state/site
@@ -105,4 +105,4 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
