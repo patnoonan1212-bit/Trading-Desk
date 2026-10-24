@@ -90,7 +90,7 @@ class SyntheticProvider(HistoricalProvider):
         under = price0 * np.exp(np.cumsum(rets))
 
         rows = []
-        for i, (symbol, exp) in enumerate(_contracts(root, start, end)):
+        for symbol, exp in _contracts(root, start, end):
             live = (idx < exp) & (idx > exp - pd.Timedelta(days=200))
             if not live.any():
                 continue
