@@ -95,8 +95,21 @@ def build_markdown(res: BacktestResult, df: pd.DataFrame, s: dict, e: dict, data
             f"| Commissions and roll costs | {_money(s['costs'])} |",
             f"| Stopped out, then target reached anyway | {_pct(s['stopped_then_target_pct'])} of stop-outs |",
         ]
-        for title, col in [("By contract", "symbol"), ("By setup", "setup"), ("By session", "session"), ("By direction", "direction")]:
-            md += ["", f"## {title}", "", _table(breakdown(df, col))]
+        for title, col in [("By contract", "symbol"), ("By setup", "setup"), ("By market regime", "trend"), ("By volatility", "volatility"),
+                           ("By session", "session"), ("By direction", "direction")]:
+            if col in df and df[col].astype(str).str.len().gt(0).any():
+                md += ["", f"## {title}", "", _table(breakdown(df, col))]
+    risk = [d for d in res.decisions if d.agent == "risk" and d.action in ("rejected", "reduced", "alert", "halt")]
+    if risk:
+        counts: dict[tuple[str, str], int] = {}
+        for d in risk:
+            key = (d.action, d.reason.split(":")[0] if ":" in d.reason[:40] else d.reason.split(" (")[0][:60])
+            counts[key] = counts.get(key, 0) + 1
+        md += ["", "## Risk Manager", "", "| Action | Rule | Times |", "|---|---|---|"]
+        md += [f"| {a} | {rule} | {n} |" for (a, rule), n in sorted(counts.items(), key=lambda kv: -kv[1])[:15]]
+        alerts = [d for d in risk if d.action == "alert"]
+        if alerts:
+            md += ["", "Alerts that would have reached your phone:", ""] + [f"- {pd.Timestamp(d.ts):%Y-%m-%d %H:%M} UTC: {d.reason}" for d in alerts[:10]]
     return "\n".join(md) + "\n"
 
 

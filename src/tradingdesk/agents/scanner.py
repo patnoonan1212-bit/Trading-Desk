@@ -164,7 +164,8 @@ class ScannerAgent(Strategy):
         best = max(candidates, key=lambda c: c.score)
         return [
             TradePlan(symbol, best.direction, float(best.entry), float(best.stop), float(best.target), best.setup, best.why,
-                      self.timeframe, confirm_level=best.confirm_level)
+                      self.timeframe, confirm_level=best.confirm_level,
+                      context={"trend": trend, "volatility": vol, "score": round(best.score, 1)})
         ]
 
     @staticmethod

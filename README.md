@@ -13,14 +13,19 @@ the code can switch it on for you.
 | Phase | What | Status |
 |---|---|---|
 | 1 | Data Agent and backtesting engine | ✅ built and tested |
-| 2 | Scanner, Market Regime and Risk Manager agents (backtest only) | next |
-| 3 | Execution Agent, paper trading on live data, Watchdog | |
+| 2 | Scanner, Market Regime and Risk Manager agents (backtest only) | ✅ built and tested |
+| 3 | Execution Agent, paper trading on live data, Watchdog | next |
 | 4 | Head trader (Claude) and News & Sentiment agents | |
 | 5 | Learning Agent and dashboard | |
 | 6 | Cloud server, phone alerts, live-trading readiness | |
 
-Right now the only strategy is `sanity_breakout`, a deliberately simple one used to check that the engine
-works. Its results mean nothing for real trading. Real strategies arrive with the Scanner in Phase 2.
+The backtests now use the real decision chain: the **Market Regime Agent** reads the market, the **Scanner**
+finds setups that suit it, and the **Risk Manager** can approve, shrink or veto every trade. Nothing has been
+tested on real prices yet: that needs the Databento download below.
+
+**Live data plan:** paper trading in Phase 3 starts on free delayed prices (about 10 minutes late), which is
+enough to prove the plumbing works without paying for data. Real-time prices come through Tradovate later,
+before any decision about live money.
 
 ## Using it (no coding needed)
 
@@ -59,6 +64,18 @@ reuse it for free.
 4. At the bottom of the page under **Artifacts**, `backtest-report` has the full report with the equity chart
    (`report.html`), every trade (`trades.csv`) and every decision with its reason (`decisions.jsonl`).
 
+### Walk-forward test (is the edge real?)
+
+A normal backtest can look great simply because the settings were tuned on the same data. The walk-forward test
+guards against that:
+
+1. **Actions → Walk-forward test → Run workflow.**
+2. It tunes the setups on a stretch of history (default 12 months), then trades the *next* stretch (default
+   3 months) with those settings, untouched. It slides forward and repeats until the data runs out.
+3. Setups that didn't earn their keep in training (too few trades, or results that could easily be luck) are
+   switched off for the next stretch.
+4. The report shows only the results from the unseen stretches, joined together. That is the honest estimate.
+
 ## Settings
 
 All limits live in [`config/default.yaml`](config/default.yaml), with a comment on every line. The main ones:
@@ -68,14 +85,19 @@ All limits live in [`config/default.yaml`](config/default.yaml), with a comment 
 | `mode` | `paper` | paper / live / backtest |
 | `account.starting_equity` | 50,000 | dollars |
 | `risk.risk_per_trade_pct` | 1.5 | most a trade can lose, across all its entries |
-| `risk.max_daily_loss_pct` | 4 | stop for the day (Phase 2) |
-| `risk.max_consecutive_losses` | 3 | stop for the day (Phase 2) |
-| `risk.max_weekly_drawdown_pct` | 8 | pause and alert (Phase 2) |
+| `risk.max_daily_loss_pct` | 4 | stop new trades for the day |
+| `risk.max_consecutive_losses` | 3 | stop new trades for the day |
+| `risk.max_weekly_drawdown_pct` | 8 | pause until next week and alert |
+| `risk.max_total_drawdown_pct` | 20 | circuit breaker: stop everything until you restart it (0 = off) |
+| `risk.correlated_groups` | MES + MNQ ≤ 2% | the two stock-index contracts share one risk budget |
+| `risk.news_blackout_minutes` | 10 | no new entries 10 minutes either side of jobs reports and Fed decisions |
+| `risk.kill_switch` | false | set to true to stop all new trades immediately |
 | `risk.min_reward_risk` | 3 | only take setups with at least 3:1 potential |
+| `scanner.min_score` | 50 | only take setups scoring 50+ out of 100 |
 | `sessions.entry_windows` | all | trade any time a good setup appears |
 | `costs.commission_per_side` | 0.85 | per contract, all fees included |
 
-## How the engine trades (Phase 1)
+## How a trade is managed
 
 - **Scaling in:** if a trade can be 3+ contracts, it enters about 1/3 on the signal and adds the rest only after a
   1-minute close confirms the move. The add is sized from whatever risk budget is left, so all entries together
@@ -88,6 +110,19 @@ All limits live in [`config/default.yaml`](config/default.yaml), with a comment 
   need price to trade through them, slippage is larger overnight, thin minutes fill partially, and if the stop and
   the target are hit in the same minute the stop is assumed to come first.
 - **Rolls:** follows the most-traded contract month; holding through a roll costs a round trip of fees and slippage.
+
+## How the agents decide (Phase 2)
+
+- **Market Regime Agent** looks at hourly bars and labels each market: trending up, trending down, ranging or
+  in transition, and whether volatility is low, normal or high. Each setup only runs in the conditions it suits
+  (for example, buying dips only in an uptrend; fading extremes only in a quiet range).
+- **Scanner** watches 15-minute bars for five setups: trend breakout, pullback in a trend, mean reversion,
+  liquidity sweep (a fake break of a high/low that snaps back) and squeeze breakout. Stops go beyond real market
+  structure and targets at real levels. Each setup gets a 0-100 score from trend alignment, volume, reward-to-risk
+  and session, and only the best one per market is passed on.
+- **Risk Manager** has the final say on every trade, checked in this order: kill switch, circuit breaker,
+  weekly limit, daily limit, losing streak, number of open trades, news blackout, and the MES/MNQ shared budget.
+  It can approve, approve a smaller size, or veto, and writes the reason in plain English every time.
 
 More detail on the design choices: [`docs/design.md`](docs/design.md).
 

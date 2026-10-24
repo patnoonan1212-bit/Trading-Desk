@@ -1,0 +1,63 @@
+# The "Walk-forward test" button: Actions tab -> Walk-forward test -> Run workflow.
+# Tunes each setup on one stretch of history, trades the next stretch it has never seen, and rolls forward.
+# Only the unseen stretches count. The report appears on the run's page.
+name: Walk-forward test
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Contracts (space separated)"
+        default: "MES MNQ MCL MGC"
+      start:
+        description: "From date (YYYY-MM-DD)"
+        default: "2023-01-01"
+      end:
+        description: "To date (YYYY-MM-DD)"
+        default: "2025-01-01"
+      train_months:
+        description: "Months used for tuning in each step"
+        default: "6"
+      test_months:
+        description: "Months traded on unseen data in each step"
+        default: "3"
+      synthetic:
+        description: "Use made-up test data instead of downloaded data"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  walkforward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Get stored market data
+        if: ${{ !inputs.synthetic }}
+        run: |
+          if gh release download market-data -p data.tar.gz; then
+            tar -xzf data.tar.gz
+          else
+            echo "### No market data yet" >> "$GITHUB_STEP_SUMMARY"
+            echo "Run the **Download market data** workflow first, or tick **Use made-up test data**." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Walk-forward test
+        run: |
+          desk walkforward --symbols ${{ inputs.symbols }} --start ${{ inputs.start }} --end ${{ inputs.end }} \
+            --train-months ${{ inputs.train_months }} --test-months ${{ inputs.test_months }} --out report \
+            ${{ inputs.synthetic && '--synthetic' || '' }} > walkforward.log 2>&1 || (tail -50 walkforward.log; exit 1)
+          cat report/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walkforward-report
+          path: |
+            report
+            walkforward.log

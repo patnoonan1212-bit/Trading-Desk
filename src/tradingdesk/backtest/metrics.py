@@ -41,6 +41,7 @@ def trades_frame(trades: list[TradeRecord]) -> pd.DataFrame:
                 "mfe_r": round(t.max_favorable / t.risk_points, 2) if t.risk_points else 0.0,
                 "mae_r": round(t.max_adverse / t.risk_points, 2) if t.risk_points else 0.0,
                 "exit": "; ".join(t.exit_reasons), "stopped_then_target": t.stopped_then_target, "reason": t.reason,
+                "trend": t.context.get("trend", ""), "volatility": t.context.get("volatility", ""), "score": t.context.get("score"),
             }
         )
     df = pd.DataFrame(rows)

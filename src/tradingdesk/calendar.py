@@ -5,8 +5,9 @@ The calendar lives in a plain CSV file (config/economic_calendar.csv) with colum
 In Phase 4 the News & Sentiment Agent keeps it up to date from a live calendar source.
 
 `build_default_calendar()` writes a starter file with:
-  - US jobs report (NFP): first Friday of each month at 08:30 ET. This is the usual schedule; the Labor Department
-    occasionally moves it (holidays, shutdowns), so check the official schedule before relying on a specific date.
+  - US jobs report (NFP) at 08:30 ET, using the Labor Department's rule: the third Friday after the week that
+    contains the 12th of the previous month. That is often, but not always, the first Friday. Holidays and
+    government shutdowns occasionally move it, so check the official schedule before relying on a specific date.
   - FOMC rate decisions at 14:00 ET on the Fed's published meeting dates.
 CPI release dates vary and are not generated here; they arrive with the News Agent's calendar in Phase 4.
 """
@@ -30,17 +31,21 @@ FOMC_DECISION_DATES = [
 ]
 
 
-def _first_fridays(start_year: int, end_year: int) -> list[pd.Timestamp]:
+def jobs_report_dates(start_year: int, end_year: int) -> list[pd.Timestamp]:
+    """Release dates of the monthly jobs report: third Friday after the week (Sun-Sat) containing the 12th."""
     out = []
-    for y in range(start_year, end_year + 1):
+    for y in range(start_year - 1, end_year + 1):
         for m in range(1, 13):
-            d = pd.Timestamp(year=y, month=m, day=1)
-            out.append(d + pd.Timedelta(days=(4 - d.weekday()) % 7))
+            twelfth = pd.Timestamp(year=y, month=m, day=12)
+            week_end = twelfth + pd.Timedelta(days=(5 - twelfth.weekday()) % 7)  # that week's Saturday
+            release = week_end + pd.Timedelta(days=6 + 14)                       # first Friday after, plus two weeks
+            if start_year <= release.year <= end_year:
+                out.append(release)
     return out
 
 
 def build_default_calendar(start_year: int = 2022, end_year: int = 2026) -> pd.DataFrame:
-    rows = [(f"{d:%Y-%m-%d} 08:30", "US jobs report (NFP)", "high") for d in _first_fridays(start_year, end_year)]
+    rows = [(f"{d:%Y-%m-%d} 08:30", "US jobs report (NFP)", "high") for d in jobs_report_dates(start_year, end_year)]
     rows += [(f"{d} 14:00", "FOMC rate decision", "high") for d in FOMC_DECISION_DATES if start_year <= int(d[:4]) <= end_year]
     return pd.DataFrame(rows, columns=["time_et", "event", "impact"]).sort_values("time_et").reset_index(drop=True)
 

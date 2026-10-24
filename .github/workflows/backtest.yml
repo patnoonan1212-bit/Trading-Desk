@@ -17,8 +17,8 @@ on:
       strategy:
         description: "Strategy"
         type: choice
-        options: [sanity_breakout]
-        default: sanity_breakout
+        options: [scanner, sanity_breakout]
+        default: scanner
       equity:
         description: "Starting equity (USD)"
         default: "50000"

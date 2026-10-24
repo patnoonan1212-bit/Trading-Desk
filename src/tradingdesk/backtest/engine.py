@@ -110,12 +110,15 @@ class _Feed:
 
 
 class Backtester:
-    def __init__(self, settings: Settings, strategies: list[Strategy], data: dict[str, pd.DataFrame], bus: EventBus | None = None, risk_gate: RiskGate | None = None) -> None:
+    def __init__(self, settings: Settings, strategies: list[Strategy], data: dict[str, pd.DataFrame], bus: EventBus | None = None,
+                 risk_gate: RiskGate | None = None, trade_from=None) -> None:
         self.s = settings
         self.strategies = strategies
         self.data = data
         self.bus = bus or EventBus()
         self.risk_gate = risk_gate or RiskGate()
+        # Bars before this time only warm up indicators; no trades are opened on them.
+        self.trade_from_ns = None if trade_from is None else pd.Timestamp(trade_from).as_unit("ns").value
         self.realised = 0.0
         self.trades: list[Trade] = []
         self.open: dict[str, list[Trade]] = defaultdict(list)
@@ -329,13 +332,15 @@ class Backtester:
             stop = w["extreme"] - p.direction * self.s.execution.stops.atr_buffer * a
             new = TradePlan(p.symbol, p.direction, bar.close, stop, p.target, p.setup,
                             f"Re-entry: stopped out, then price closed back {'above' if p.direction == 1 else 'below'} {lvl:.2f}; the setup is still valid.",
-                            p.timeframe, confirm_level=None)
+                            p.timeframe, confirm_level=None, context={**p.context, "reentry": True})
             self._consider(new, f, bar, is_reentry=True)
         self._watch_reentry = keep_r
 
     # ----- accepting a trade idea ------------------------------------------------------------------------
     def _consider(self, plan: TradePlan, f: _Feed, bar: Bar, is_reentry: bool = False) -> None:
         sym = plan.symbol
+        if self.trade_from_ns is not None and bar.ts_ns < self.trade_from_ns:
+            return
 
         def reject(reason: str) -> None:
             self.decide("risk", "rejected", reason, sym, bar.ts, setup=plan.setup)
@@ -362,7 +367,7 @@ class Backtester:
             budget = verdict.max_budget
         record = TradeRecord(id=len(self.trades) + 1, symbol=sym, setup=plan.setup, direction=plan.direction, reason=plan.reason,
                              planned_at=bar.ts, session=bar.session, initial_stop=plan.stop, target=plan.target,
-                             risk_points=plan.risk_points, is_reentry=is_reentry)
+                             risk_points=plan.risk_points, is_reentry=is_reentry, context=dict(plan.context))
         probe = Trade(record, plan, f.broker, self.s.execution, budget, "single")
         per = probe.per_contract_risk(plan.entry, bar.session)
         qty = math.floor(budget / per) if per > 0 else 0

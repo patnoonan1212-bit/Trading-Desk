@@ -33,6 +33,7 @@ class TradePlan:
     timeframe: str = "15m"
     confirm_level: float | None = None   # a confirm-timeframe close beyond this confirms the trade
     valid_for_bars: int = 3              # how many setup bars the idea stays valid if not triggered
+    context: dict = field(default_factory=dict)  # regime, volatility, score... kept with the trade for analysis
 
     @property
     def risk_points(self) -> float:
@@ -116,6 +117,7 @@ class TradeRecord:
     max_adverse: float = 0.0           # worst move against us, in points
     stopped_then_target: bool | None = None  # stopped out, then price reached the original target anyway
     is_reentry: bool = False
+    context: dict = field(default_factory=dict)
 
     @property
     def net_pnl(self) -> float:

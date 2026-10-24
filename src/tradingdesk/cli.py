@@ -127,6 +127,35 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def cmd_walkforward(args) -> int:
+    import os
+
+    from tradingdesk.backtest.walkforward import WalkForward, report_markdown
+
+    s = _settings(args, mode="backtest")
+    symbols = args.symbols or s.contracts
+    agent = _agent(s, EventBus())
+    for sym in symbols:
+        if args.synthetic and agent.store.coverage(sym) is None:
+            agent.download(sym, args.start, args.end)
+        try:
+            agent.continuous(sym, rebuild=True)
+        except LookupError as e:
+            print(f"Skipping {sym}: {e}")
+    workers = args.workers or max(1, (os.cpu_count() or 2) - 1)
+    res = WalkForward(s, symbols, workers=workers, min_trades=args.min_trades).run(args.start, args.end, args.train_months, args.test_months)
+    out = Path(args.out or f"reports/walkforward-{datetime.now():%Y%m%d-%H%M%S}")
+    out.mkdir(parents=True, exist_ok=True)
+    note = "Made-up (synthetic) data: these results only show the machinery works." if args.synthetic else ""
+    md = report_markdown(res, symbols, note)
+    (out / "report.md").write_text(md)
+    res.oos_trades.to_csv(out / "oos_trades.csv", index=False)
+    res.in_sample.to_csv(out / "in_sample.csv", index=False)
+    res.oos_equity.rename("equity").to_csv(out / "oos_equity.csv")
+    print(md)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="desk", description="Trading desk command line")
     p.add_argument("--config", default=None, help="settings file (default: config/default.yaml)")
@@ -161,6 +190,15 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--rebuild", action="store_true", help="rebuild the continuous contracts from stored bars")
     b.add_argument("--no-risk-manager", action="store_true", help="turn off portfolio risk limits (for comparison only)")
     b.set_defaults(func=cmd_backtest)
+
+    wf = sub.add_parser("walkforward", help="tune on past data, test on the next stretch, roll forward")
+    common(wf, symbols_required=False)
+    wf.add_argument("--train-months", type=int, default=6)
+    wf.add_argument("--test-months", type=int, default=3)
+    wf.add_argument("--min-trades", type=int, default=20, help="training trades a setup needs before it may be used")
+    wf.add_argument("--workers", type=int, default=0, help="parallel backtests (default: CPUs - 1)")
+    wf.add_argument("--out", default=None)
+    wf.set_defaults(func=cmd_walkforward)
 
     args = p.parse_args(argv)
     setup_logging("INFO", None)
