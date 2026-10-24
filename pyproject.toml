@@ -22,7 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 databento = ["databento>=0.40"]
-dev = ["pytest>=8", "ruff>=0.5"]
+dev = ["pytest>=8", "ruff==0.17.2"]
 
 [project.scripts]
 desk = "tradingdesk.cli:main"
