@@ -379,6 +379,7 @@ def report_markdown(rep: LearningReport) -> str:
     md += ["## Suggested changes", ""]
     if not rep.proposals:
         md.append("None this week. Nothing in the results is clear enough to act on." if not rep.trades.empty else "None yet.")
+        md.append("")
     for p in rep.proposals:
         icon = {"passed": "✅", "failed": "❌", "not tested": "⏳"}[p.status]
         md += [f"### {icon} {p.id}: {p.title}", "", p.why, "", f"- Evidence: {p.evidence}", f"- Test: {p.test}"]
