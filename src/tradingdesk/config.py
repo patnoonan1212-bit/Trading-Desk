@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from datetime import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -35,10 +35,14 @@ class Risk(BaseModel):
     max_daily_loss_pct: float = Field(gt=0, le=20)
     max_consecutive_losses: int = Field(ge=1)
     max_weekly_drawdown_pct: float = Field(gt=0, le=30)
+    max_total_drawdown_pct: float = Field(20.0, ge=0, le=100)
     max_open_positions: int = Field(ge=1)
     correlated_groups: list[CorrelatedGroup] = []
     min_reward_risk: float = Field(ge=1)
     news_blackout_minutes: int = Field(ge=0)
+    calendar_file: Path | None = None
+    weekly_resume: Literal["auto", "manual"] = "auto"
+    kill_switch: bool = False
 
     @model_validator(mode="after")
     def _daily_at_least_one_trade(self) -> Risk:
@@ -110,6 +114,28 @@ class Execution(BaseModel):
     min_liquidity: MinLiquidity
 
 
+class Regime(BaseModel):
+    timeframe: str = "1h"
+    adx_period: int = Field(14, ge=2)
+    trend_adx: float = 25
+    range_adx: float = 20
+    ema_period: int = Field(50, ge=2)
+    vol_lookback_bars: int = Field(240, ge=20)
+    high_vol_pct: float = Field(0.8, gt=0, lt=1)
+    low_vol_pct: float = Field(0.2, gt=0, lt=1)
+    allowed: dict[str, list[str]] = {}
+    blocked_in_high_volatility: list[str] = []
+
+
+class Scanner(BaseModel):
+    timeframe: str = "15m"
+    min_score: float = Field(50, ge=0, le=100)
+    setups: dict[str, dict[str, Any]] = {}
+
+    def enabled(self) -> dict[str, dict[str, Any]]:
+        return {k: {p: v for p, v in cfg.items() if p != "enabled"} for k, cfg in self.setups.items() if cfg.get("enabled", True)}
+
+
 class Roll(BaseModel):
     method: Literal["volume"] = "volume"
     confirm_days: int = Field(ge=1)
@@ -134,6 +160,8 @@ class Settings(BaseModel):
     account: Account
     risk: Risk
     contracts: list[str]
+    regime: Regime = Regime()
+    scanner: Scanner = Scanner()
     sessions: Sessions
     costs: Costs
     execution: Execution

@@ -14,26 +14,32 @@ bar that created it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import pandas as pd
 
 from tradingdesk.backtest.models import Fill, Order
 from tradingdesk.contracts import ContractSpec
 
 
-@dataclass
 class Bar:
-    seq: int
-    ts: pd.Timestamp
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float
-    adjustment: float
-    session: str
-    contract: str
+    """One 1-minute bar as the engine sees it. The timestamp is kept as nanoseconds and only turned into a
+    pandas Timestamp when something actually needs it (a fill or a log line); that keeps backtests fast."""
+
+    __slots__ = ("seq", "ts_ns", "_ts", "open", "high", "low", "close", "volume", "adjustment", "session", "contract")
+
+    def __init__(self, seq, ts, open, high, low, close, volume, adjustment, session, contract) -> None:
+        self.seq = seq
+        if isinstance(ts, pd.Timestamp):
+            self._ts, self.ts_ns = ts, ts.value
+        else:
+            self._ts, self.ts_ns = None, int(ts)
+        self.open, self.high, self.low, self.close = open, high, low, close
+        self.volume, self.adjustment, self.session, self.contract = volume, adjustment, session, contract
+
+    @property
+    def ts(self) -> pd.Timestamp:
+        if self._ts is None:
+            self._ts = pd.Timestamp(self.ts_ns, tz="UTC")
+        return self._ts
 
 
 class SimBroker:

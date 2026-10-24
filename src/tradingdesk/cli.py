@@ -21,12 +21,16 @@ from tradingdesk.logging_setup import attach_decision_log, setup_logging
 
 log = logging.getLogger("desk")
 
-STRATEGIES = {"sanity_breakout": "tradingdesk.strategies.sanity_breakout:SanityBreakout"}
+STRATEGIES = {
+    "scanner": "tradingdesk.agents.scanner:ScannerAgent",
+    "sanity_breakout": "tradingdesk.strategies.sanity_breakout:SanityBreakout",
+}
 
 
-def _strategy(name: str):
+def _strategy(name: str, settings):
     module, cls = STRATEGIES[name].split(":")
-    return getattr(__import__(module, fromlist=[cls]), cls)()
+    klass = getattr(__import__(module, fromlist=[cls]), cls)
+    return klass(settings) if name == "scanner" else klass()
 
 
 def _settings(args, **overrides):
@@ -110,8 +114,11 @@ def cmd_backtest(args) -> int:
     if not data:
         print("No data available. Download data first (or use --synthetic).")
         return 1
-    strategies = [_strategy(n) for n in args.strategy]
-    res = Backtester(s, strategies, data, bus=bus).run()
+    strategies = [_strategy(n, s) for n in args.strategy]
+    from tradingdesk.agents.risk import RiskManager
+
+    gate = None if args.no_risk_manager else RiskManager(s)
+    res = Backtester(s, strategies, data, bus=bus, risk_gate=gate).run()
     out = Path(args.out or f"reports/backtest-{datetime.now():%Y%m%d-%H%M%S}")
     note = "Made-up (synthetic) data: these results only show the machinery works and say nothing about real trading." if args.synthetic else ""
     rep = write_report(res, out, note)
@@ -148,10 +155,11 @@ def main(argv: list[str] | None = None) -> int:
 
     b = sub.add_parser("backtest", help="run a backtest and write a report")
     common(b, symbols_required=False)
-    b.add_argument("--strategy", nargs="+", default=["sanity_breakout"], choices=sorted(STRATEGIES))
+    b.add_argument("--strategy", nargs="+", default=["scanner"], choices=sorted(STRATEGIES))
     b.add_argument("--equity", type=float, default=None, help="starting equity (default from config)")
     b.add_argument("--out", default=None, help="folder for the report")
     b.add_argument("--rebuild", action="store_true", help="rebuild the continuous contracts from stored bars")
+    b.add_argument("--no-risk-manager", action="store_true", help="turn off portfolio risk limits (for comparison only)")
     b.set_defaults(func=cmd_backtest)
 
     args = p.parse_args(argv)

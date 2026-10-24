@@ -44,6 +44,7 @@ from tradingdesk.timeutil import in_window, sessions_of
 
 log = logging.getLogger(__name__)
 
+_FIFTEEN_MIN = 15 * 60 * 10**9
 WATCH_BARS_AFTER_STOP = 1380  # about one trading day of 1-minute bars
 REENTRY_WINDOW_BARS = 60
 
@@ -53,12 +54,20 @@ def _ns(index: pd.DatetimeIndex) -> np.ndarray:
     return index.as_unit("ns").asi8
 
 
-class RiskGate:
-    """Hook for portfolio-level risk rules. Phase 1: allow everything. Phase 2: the Risk Manager Agent."""
+@dataclass
+class Verdict:
+    """The risk check's answer: allowed or not, why, and optionally a smaller dollar budget than usual."""
 
-    def check(self, plan: TradePlan, engine: Backtester, bar: Bar) -> str | None:
-        """Return None to allow, or a plain-English reason to reject."""
-        return None
+    allowed: bool
+    reason: str = ""
+    max_budget: float | None = None
+
+
+class RiskGate:
+    """Hook for portfolio-level risk rules. The default allows everything; the Risk Manager Agent replaces it."""
+
+    def check(self, plan: TradePlan, engine: Backtester, bar: Bar) -> Verdict:
+        return Verdict(True)
 
     def on_trade_closed(self, record: TradeRecord, engine: Backtester) -> None:
         pass
@@ -92,8 +101,12 @@ class _Feed:
     broker: SimBroker
     setups: dict[int, list[tuple[int, int]]] = field(default_factory=dict)  # 1m index -> [(strategy, setup bar)]
 
+    ts_ns: np.ndarray | None = None
+
     def bar(self, i: int) -> Bar:
-        return Bar(i, self.ts[i], self.o[i], self.h[i], self.lo[i], self.c[i], self.v[i], self.adj[i], self.session[i], self.contract[i])
+        if self.ts_ns is None:
+            self.ts_ns = _ns(self.ts)
+        return Bar(i, int(self.ts_ns[i]), self.o[i], self.h[i], self.lo[i], self.c[i], self.v[i], self.adj[i], self.session[i], self.contract[i])
 
 
 class Backtester:
@@ -175,7 +188,7 @@ class Backtester:
             bar = f.bar(i)
             self.last_close[f.root] = bar.close
             self._step(f, bar)
-            snap = bar.ts.floor("15min")
+            snap = bar.ts_ns // _FIFTEEN_MIN
             if snap != last_snap:
                 equity_points.append((bar.ts, self.equity()))
                 last_snap = snap
@@ -339,11 +352,14 @@ class Backtester:
             return reject(f"Market too thin right now ({int(bar.volume)} contracts traded in the last minute).")
         if len(self.open_trades) >= self.s.risk.max_open_positions:
             return reject(f"Already at the maximum of {self.s.risk.max_open_positions} open positions.")
-        gate = self.risk_gate.check(plan, self, bar)
-        if gate:
-            return reject(gate)
+        verdict = self.risk_gate.check(plan, self, bar)
+        if not verdict.allowed:
+            return reject(verdict.reason)
 
         budget = self.equity() * self.s.risk.risk_per_trade_pct / 100
+        if verdict.max_budget is not None and verdict.max_budget < budget:
+            self.decide("risk", "reduced", verdict.reason, sym, bar.ts, budget=budget, reduced_to=verdict.max_budget)
+            budget = verdict.max_budget
         record = TradeRecord(id=len(self.trades) + 1, symbol=sym, setup=plan.setup, direction=plan.direction, reason=plan.reason,
                              planned_at=bar.ts, session=bar.session, initial_stop=plan.stop, target=plan.target,
                              risk_points=plan.risk_points, is_reentry=is_reentry)
@@ -361,7 +377,7 @@ class Backtester:
         side = "long" if plan.direction == 1 else "short"
         self.decide("scanner", "trade_idea", plan.reason, sym, bar.ts, setup=plan.setup, direction=side)
         self.decide("risk", "approved",
-                    f"{side.title()} {sym}: risk ${budget:,.0f} ({self.s.risk.risk_per_trade_pct}% of equity), stop {plan.stop:.2f}, "
+                    f"{side.title()} {sym}: risk ${budget:,.0f} ({budget / self.equity() * 100:.2f}% of equity), stop {plan.stop:.2f}, "
                     f"{plan.reward_risk:.1f}:1 to the first objective, up to {qty} contracts ({mode}).",
                     sym, bar.ts, trade_id=record.id)
         trade.start(bar, qty)
