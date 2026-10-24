@@ -19,4 +19,6 @@ jobs:
       - run: pip install -e ".[live]"
       - run: desk live check --out check.md && cat check.md >> "$GITHUB_STEP_SUMMARY"
       - name: Show the result as notes on the run
-        run: grep -E '^\| M|^\*\*|^\| (Calendar|News)' check.md | head -10 | while IFS= read -r l; do echo "::notice title=Live data::$l"; done
+        run: |
+          echo "::notice title=Prices::$(grep -E '^\| M|^\*\*' check.md | sed ':a;N;$!ba;s/\n/%0A/g')"
+          echo "::notice title=Calendar and news::$(grep -E '^\| (Calendar|News)' check.md | sed ':a;N;$!ba;s/\n/%0A/g')"
