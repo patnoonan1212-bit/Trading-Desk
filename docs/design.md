@@ -126,3 +126,35 @@ notifications reach you without Telegram or another app. Phase 6 moves this to a
 Databento data is licensed for your own use, and release files in a public repository can be downloaded by
 anyone, so the stored data file is encrypted with your Databento key (AES-256). If the key changes, download the
 data again.
+
+# Phase 4
+
+## Claude reviews, the rules decide
+The head trader only sees ideas that already passed every rule, and it can only approve, shrink (25-75%) or
+reject. The Risk Manager's limits stay the final word and nothing Claude says can loosen them. This keeps Claude
+where judgment adds something (context the rules can't encode) without letting a model error create risk. It
+also keeps the cost down: Claude is never asked about trades the rules would refuse anyway.
+
+## Structured answers, a hard budget, fail-safe defaults
+Every Claude call asks for JSON that must match a schema, so answers can't be misread. Each call's cost is
+worked out from the tokens it used and recorded; at `monthly_budget_usd` calls stop until next month, with news
+allowed at most half. No key, budget used up, an API error, or a declined request all fall back to
+`when_unavailable` (rules by default). Requests opt into Anthropic's automatic fallback model if a safety check
+declines them. The model is Claude Opus 5.5 by default; `reasoning.model` and `news.model` can be set to a cheaper
+model.
+
+## Replay stays exact
+Paper trading replays history every update, but Claude must be asked once per idea and give the same answer on
+every replay. Reviews are stored with the idea (time, contract, setup, direction) in `overseer.json` and reused.
+News works the same way: every headline and every mood reading is stored with the time the desk learned it, and
+the desk only ever uses what it knew at the moment of a decision. Calendar events in the past are never changed.
+
+## No Claude in backtests
+Claude was trained on market history, so asking it about a 2023 trade would leak hindsight into the results.
+Backtests and walk-forward tests therefore run on the rules alone. The head trader's value is measured in paper
+trading.
+
+## Two kinds of news protection
+Scheduled releases come from a calendar (built-in dates for jobs, inflation and Fed decisions back to 2022, plus
+this week's live calendar). Unscheduled news is caught two ways: Claude reading headlines (paper and live), and the
+sudden-move guard, a plain price rule that also runs in backtests so its effect can be measured.

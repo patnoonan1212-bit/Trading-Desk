@@ -15,8 +15,8 @@ the code can switch it on for you.
 | 1 | Data Agent and backtesting engine | ✅ built and tested |
 | 2 | Scanner, Market Regime and Risk Manager agents (backtest only) | ✅ built and tested |
 | 3 | Execution Agent, paper trading on live data, Watchdog | ✅ built and tested |
-| 4 | Head trader (Claude) and News & Sentiment agents | next |
-| 5 | Learning Agent and dashboard | |
+| 4 | Head trader (Claude) and News & Sentiment agents | ✅ built and tested |
+| 5 | Learning Agent and dashboard | next |
 | 6 | Cloud server, phone alerts, live-trading readiness | |
 
 The backtests now use the real decision chain: the **Market Regime Agent** reads the market, the **Scanner**
@@ -107,6 +107,41 @@ Good to know:
   server.
 - This repository is public, so the status issue is visible to anyone. It only shows paper trades.
 
+## The head trader and the news desk (Phase 4)
+
+**Head trader.** Every trade idea that passes the Scanner and all of the Risk Manager's checks goes to Claude
+before it is placed. Claude sees what a human head trader would: the setup and why the Scanner likes it, the last
+few hours of the chart, the market regime, the account (equity, today's result, open trades, recent trades),
+scheduled releases coming up, and the latest news. It then approves the trade, makes it smaller, or passes on it,
+and says why in a sentence or two. It can never make a trade bigger, move a stop, or overrule the Risk Manager.
+Its comments appear on the status page and in the trade notifications.
+
+**News & Sentiment.** Every update the News Agent:
+- adds this week's important US releases (inflation, jobs, Fed, GDP, retail sales and more) to the no-trade
+  windows around news, from a free live calendar. The weekly crude oil inventory report pauses crude (MCL) only.
+- reads free headline feeds (the Federal Reserve, MarketWatch, CNBC, OilPrice).
+- about once an hour, has Claude read the new headlines and record the mood for each market. If something
+  serious and unexpected is breaking (a surprise Fed move, a war, a crash), it can pause new trades for up to an hour.
+
+**Sudden-move guard.** Separately from Claude, if any contract moves in one minute many times more than it
+normally does, which is often the first sign of unexpected news, new trades on it pause for 15 minutes. This rule
+also runs in backtests.
+
+**Turning Claude on.** It needs an Anthropic API key (Claude is paid per use):
+1. Create a key at [console.anthropic.com](https://console.anthropic.com) (**API keys → Create key**). While
+   there, set a monthly spend limit under **Billing** as a second safety net.
+2. In this repository: **Settings → Secrets and variables → Actions → New repository secret**, name
+   `ANTHROPIC_API_KEY`, paste the key.
+
+The desk caps its own Claude spending at **$20 a month** (`reasoning.monthly_budget_usd`). At current prices
+that should cover a few trade reviews a day plus hourly news reading, roughly $5 to $15 a month in total. The status page
+shows what's been spent. When the cap is reached, or without a key, the desk keeps trading on its rules alone
+(set `reasoning.when_unavailable: skip` to take no trades instead).
+
+Claude is not used in backtests: it already knows how past markets turned out, so its reviews of old trades
+would look better than they could ever be in real time. Its value can only be judged in paper trading, by
+comparing the trades it approved with the ones it passed on (that comparison comes with the Learning Agent in Phase 5).
+
 ## Settings
 
 All limits live in [`config/default.yaml`](config/default.yaml), with a comment on every line. The main ones:
@@ -127,6 +162,11 @@ All limits live in [`config/default.yaml`](config/default.yaml), with a comment 
 | `scanner.min_score` | 50 | only take setups scoring 50+ out of 100 |
 | `execution.max_contracts_per_order` | 100 | safety cap: any bigger order is refused |
 | `paper.notify` | trades | trades / alerts / none: what gets posted to you |
+| `reasoning.enabled` | true | Claude reviews each trade before it's placed |
+| `reasoning.monthly_budget_usd` | 20 | Claude spending stops for the month at this amount |
+| `reasoning.when_unavailable` | rules | no key / over budget: rules = trade anyway, skip = no trade |
+| `news.max_pause_minutes` | 60 | longest pause the news desk may call for breaking news |
+| `risk.shock_pause` | 6x / 15 min | sudden-move guard |
 | `sessions.entry_windows` | all | trade any time a good setup appears |
 | `costs.commission_per_side` | 0.85 | per contract, all fees included |
 

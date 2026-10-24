@@ -134,7 +134,6 @@ news:
   feeds:                          # free headline feeds (RSS)
     - https://www.federalreserve.gov/feeds/press_all.xml
     - https://feeds.content.dowjones.io/public/rss/mw_topstories
-    - https://feeds.content.dowjones.io/public/rss/mw_marketpulse
     - https://www.cnbc.com/id/100003114/device/rss/rss.html
     - https://www.cnbc.com/id/20910258/device/rss/rss.html
     - https://oilprice.com/rss/main
