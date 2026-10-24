@@ -39,7 +39,8 @@ class EmailAlerter:
     def send(self, subject: str, body: str) -> bool:
         """Send a plain-text email. Returns False (and remembers why) instead of raising."""
         if not self.configured:
-            self.last_error = "email isn't set up (ALERT_EMAIL_TO, SMTP_USERNAME, SMTP_PASSWORD)"
+            missing = [n for n, v in (("ALERT_EMAIL_TO", self.to), ("SMTP_USERNAME", self.username), ("SMTP_PASSWORD", self.password)) if not v]
+            self.last_error = f"these secrets are missing or empty: {', '.join(missing)}"
             return False
         msg = EmailMessage()
         msg["Subject"] = subject
