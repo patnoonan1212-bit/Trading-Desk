@@ -1,0 +1,65 @@
+# The "Run backtest" button: Actions tab -> Run backtest -> Run workflow.
+# The report appears on the run's page; the full report (equity chart, every trade, every decision) is
+# under "Artifacts" at the bottom of that page.
+name: Run backtest
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Contracts (space separated)"
+        default: "MES MNQ MCL MGC"
+      start:
+        description: "From date (YYYY-MM-DD)"
+        default: "2024-01-01"
+      end:
+        description: "To date (YYYY-MM-DD)"
+        default: "2025-01-01"
+      strategy:
+        description: "Strategy"
+        type: choice
+        options: [sanity_breakout]
+        default: sanity_breakout
+      equity:
+        description: "Starting equity (USD)"
+        default: "50000"
+      synthetic:
+        description: "Use made-up test data instead of downloaded data"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Get stored market data
+        if: ${{ !inputs.synthetic }}
+        run: |
+          if gh release download market-data -p data.tar.gz; then
+            tar -xzf data.tar.gz
+          else
+            echo "### No market data yet" >> "$GITHUB_STEP_SUMMARY"
+            echo "Run the **Download market data** workflow first, or tick **Use made-up test data**." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Backtest
+        run: |
+          desk backtest --symbols ${{ inputs.symbols }} --start ${{ inputs.start }} --end ${{ inputs.end }} \
+            --strategy ${{ inputs.strategy }} --equity ${{ inputs.equity }} --out report --rebuild \
+            ${{ inputs.synthetic && '--synthetic' || '' }} > backtest.log 2>&1 || (cat backtest.log; exit 1)
+          cat report/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backtest-report
+          path: |
+            report
+            backtest.log

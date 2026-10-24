@@ -1,0 +1,10 @@
+# docker compose run --rm desk backtest --synthetic --start 2024-01-01 --end 2024-04-01
+services:
+  desk:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./logs:/app/logs
+      - ./config:/app/config

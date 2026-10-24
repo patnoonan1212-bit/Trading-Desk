@@ -1,0 +1,71 @@
+# The "Download market data" button: Actions tab -> Download market data -> Run workflow.
+# Downloads CME history from Databento, checks it, and keeps it as a file attached to the
+# "market-data" release so backtests can reuse it without downloading (and paying) again.
+name: Download market data
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Contracts (space separated)"
+        default: "MES MNQ MCL MGC"
+      start:
+        description: "From date (YYYY-MM-DD)"
+        default: "2023-01-01"
+      end:
+        description: "To date (YYYY-MM-DD)"
+        default: "2025-01-01"
+      max_cost:
+        description: "Refuse to spend more than this many dollars per contract"
+        default: "5"
+      estimate_only:
+        description: "Only show what it would cost, don't download"
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency: market-data
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    env:
+      DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[databento]"
+      - name: Check the API key is set
+        run: |
+          if [ -z "$DATABENTO_API_KEY" ]; then
+            echo "### Missing Databento key" >> "$GITHUB_STEP_SUMMARY"
+            echo "Add it under Settings -> Secrets and variables -> Actions -> New repository secret, named DATABENTO_API_KEY." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Estimate the cost
+        run: |
+          echo "### Estimated cost" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          desk data estimate --symbols ${{ inputs.symbols }} --start ${{ inputs.start }} --end ${{ inputs.end }} | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Get previously downloaded data
+        if: ${{ !inputs.estimate_only }}
+        run: |
+          gh release download market-data -p data.tar.gz || echo "No earlier data yet."
+          if [ -f data.tar.gz ]; then tar -xzf data.tar.gz && rm data.tar.gz; fi
+      - name: Download, check and store
+        if: ${{ !inputs.estimate_only }}
+        run: |
+          echo "### Download and data checks" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          desk data download --symbols ${{ inputs.symbols }} --start ${{ inputs.start }} --end ${{ inputs.end }} --max-cost ${{ inputs.max_cost }} 2>&1 | grep -v "font_manager" | tee -a "$GITHUB_STEP_SUMMARY"
+          desk data status | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Save the data to the market-data release
+        if: ${{ !inputs.estimate_only }}
+        run: |
+          tar -czf data.tar.gz data
+          gh release view market-data >/dev/null 2>&1 || gh release create market-data --title "Market data" --notes "Stored market data used by the backtest button. Updated by the Download market data workflow."
+          gh release upload market-data data.tar.gz --clobber

@@ -1,0 +1,17 @@
+# Runs the automated tests on every change, so a broken rule can never slip in unnoticed.
+name: Tests
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev,databento]"
+      - run: ruff check src tests
+      - run: pytest
