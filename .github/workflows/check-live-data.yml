@@ -1,5 +1,6 @@
 # The "Check live data" button: Actions tab -> Check live data -> Run workflow.
-# Fetches the last two days of free, delayed prices for each contract and shows what came back on the run's page.
+# Fetches the last two days of free, delayed prices for each contract, and checks the economic calendar and news
+# feeds, then shows what came back on the run's page.
 name: Check live data
 on:
   workflow_dispatch:
@@ -18,4 +19,4 @@ jobs:
       - run: pip install -e ".[live]"
       - run: desk live check --out check.md && cat check.md >> "$GITHUB_STEP_SUMMARY"
       - name: Show the result as notes on the run
-        run: grep -E '^\| M|^\*\*' check.md | head -10 | while IFS= read -r l; do echo "::notice title=Live data::$l"; done
+        run: grep -E '^\| M|^\*\*|^\| (Calendar|News)' check.md | head -10 | while IFS= read -r l; do echo "::notice title=Live data::$l"; done

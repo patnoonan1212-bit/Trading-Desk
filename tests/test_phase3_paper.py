@@ -113,6 +113,10 @@ def paper(settings, tmp_path):
     return settings, feed
 
 
+def offline(url):
+    raise OSError("offline in tests")
+
+
 def _tick(pt, feed, when):
     feed.now = pd.Timestamp(when)
     feed.now = feed.now.tz_localize("UTC") if feed.now.tz is None else feed.now
@@ -121,7 +125,7 @@ def _tick(pt, feed, when):
 
 def test_paper_ticks_are_consistent_with_one_long_replay(paper):
     settings, feed = paper
-    pt = PaperTrader(settings, feed)
+    pt = PaperTrader(settings, feed, http=offline)
     first = _tick(pt, feed, "2024-03-04 15:00")
     assert first.new == [] and (settings.paper.state_path / "status.md").exists()
     times = pd.date_range("2024-03-04 19:00", "2024-03-15 20:00", freq="10h", tz="UTC")
@@ -141,7 +145,7 @@ def test_paper_ticks_are_consistent_with_one_long_replay(paper):
 
 def test_kill_switch_stops_new_trades_without_rewriting_history(paper):
     settings, feed = paper
-    pt = PaperTrader(settings, feed)
+    pt = PaperTrader(settings, feed, http=offline)
     _tick(pt, feed, "2024-03-04 15:00")
     _tick(pt, feed, "2024-03-11 20:00")
     settings.risk.kill_switch = True
@@ -153,7 +157,7 @@ def test_kill_switch_stops_new_trades_without_rewriting_history(paper):
 
 def test_settings_change_is_reported_as_changed_history(paper):
     settings, feed = paper
-    pt = PaperTrader(settings, feed)
+    pt = PaperTrader(settings, feed, http=offline)
     _tick(pt, feed, "2024-03-04 15:00")
     first = _tick(pt, feed, "2024-03-12 20:00")
     if not any(d.action == "approved" for d in first.new):

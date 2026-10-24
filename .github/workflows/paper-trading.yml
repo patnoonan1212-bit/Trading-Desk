@@ -31,13 +31,14 @@ jobs:
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional: turns on the head trader and news reading
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[live]"
+      - run: pip install -e ".[live,ai]"
       - name: Load the paper account
         if: ${{ !inputs.reset }}
         uses: actions/cache/restore@v4

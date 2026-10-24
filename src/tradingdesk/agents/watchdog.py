@@ -7,6 +7,8 @@
     positions     does every open position have a working stop for its full size?
     risk          is any trade carrying more risk than it was given? is the Risk Manager halting trading?
     history       does replaying the recorded prices still give the same decisions that were announced?
+    news          are the live calendar and the news feeds answering?
+    claude        is the head trader connected, and how much of the month's Claude budget is used?
 
 Each check comes back as ok, warning or alert. Alerts are posted to you (see paper.notify in the settings).
 """
@@ -126,3 +128,30 @@ class Watchdog:
         if missing:
             return Check("history", "warning", f"{missing} earlier decision(s) differ from the replay (already reported).")
         return Check("history", "ok", "Replaying the recorded prices reproduces every announced decision.")
+
+    def news(self, status: dict[str, str]) -> list[Check]:
+        out = []
+        cal = status.get("calendar", "")
+        if cal.startswith("could not"):
+            out.append(Check("news calendar", "warning", f"{cal}; the built-in list of jobs, inflation and Fed dates still applies."))
+        heads = status.get("headlines", "")
+        if heads.startswith("0 of") and self.s.news.feeds:
+            out.append(Check("news feeds", "warning", "No news feed answered; headlines and the news mood are out of date."))
+        if not out:
+            parts = [x for x in (cal, heads, status.get("sentiment", "")) if x]
+            out.append(Check("news", "ok", ("; ".join(parts) + ".") if parts else "Up to date."))
+        return out
+
+    def claude(self, claude, settings: Settings) -> Check:
+        r = settings.reasoning
+        if not r.enabled:
+            return Check("head trader", "ok", "Switched off in the settings; trades follow the rules alone.")
+        if not claude.available:
+            return Check("head trader", "warning", "Not connected: add the ANTHROPIC_API_KEY secret to turn on Claude's trade reviews and "
+                                                   "news reading. Until then trades follow the rules alone.")
+        spent, cap = claude.ledger.spent(), r.monthly_budget_usd
+        if spent >= cap:
+            return Check("head trader", "warning", f"This month's ${cap:.0f} Claude budget is used up; trades follow the rules alone until next month.")
+        if spent >= 0.8 * cap:
+            return Check("head trader", "warning", f"${spent:.2f} of the ${cap:.0f} monthly Claude budget used.")
+        return Check("head trader", "ok", f"Connected; ${spent:.2f} of the ${cap:.0f} monthly budget used.")

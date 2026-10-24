@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 databento = ["databento>=0.40"]
 live = ["curl_cffi>=0.7"]  # browser-like requests for the free Yahoo feed
+ai = ["anthropic>=2.3"]    # Claude: head trader and news reading
 dev = ["pytest>=8", "ruff==0.17.2"]
 
 [project.scripts]

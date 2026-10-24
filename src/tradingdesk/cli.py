@@ -190,6 +190,21 @@ def cmd_live_check(args) -> int:
                          f"{(g.volume > 0).mean():.0%} |")
     lines += ["", f"**{ok} of {len(args.symbols or s.contracts)} contracts returned data.** "
               "Prices on this free feed are about 10 minutes behind; during the weekend and the daily 5-6 pm ET break no new bars arrive."]
+    lines += ["", "| Source | Result |", "|---|---|"]
+    from tradingdesk.agents.news import _source, http_get, parse_feed, parse_ff_calendar
+
+    try:
+        cal = parse_ff_calendar(http_get(s.news.calendar_url))
+        lines.append(f"| Calendar | {len(cal)} high-impact US releases this week |")
+    except Exception as e:
+        lines.append(f"| Calendar | error: {str(e)[:80]} |")
+    for url in s.news.feeds:
+        try:
+            items = parse_feed(http_get(url), _source(url))
+            newest = max((h["published"] for h in items), default="")
+            lines.append(f"| News {_source(url)} | {len(items)} headlines, newest {newest[:16].replace('T', ' ')} UTC |")
+        except Exception as e:
+            lines.append(f"| News {_source(url)} ({url.split('/')[-1][:20]}) | error: {str(e)[:80]} |")
     md = "\n".join(lines) + "\n"
     print(md)
     if args.out:

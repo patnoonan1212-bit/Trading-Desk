@@ -10,6 +10,8 @@ Checks, in order (all limits come from the settings file):
   losing streak         3 losing trades in a row today: no more trades today
   open positions        at most `max_open_positions` trades at once
   news blackout         no new entries from 10 minutes before to 10 minutes after a high-impact release
+  news pause            paper/live: the News Agent read a breaking story serious enough to pause new entries
+  sudden move           a 1-minute bar many times bigger than normal (often unscheduled news): pause that contract
   correlated exposure   contracts that move together (MES and MNQ) share one risk budget; a new trade is shrunk
                         to fit what's left, or rejected if nothing useful is left
 Sizing itself (1.5% per trade across all entries, and rejecting trades that can't fit even 1 contract) happens
@@ -41,10 +43,11 @@ class _Period:
 class RiskManager(RiskGate):
     name = "risk"
 
-    def __init__(self, settings: Settings, calendar: EconomicCalendar | None = None) -> None:
+    def __init__(self, settings: Settings, calendar: EconomicCalendar | None = None, news=None) -> None:
         self.s = settings
         self.r = settings.risk
         self.calendar = calendar if calendar is not None else EconomicCalendar.load(self.r.calendar_file)
+        self.news = news  # anything with pause_at(symbol, ts) -> reason or None (the News Agent's log)
         self.day = _Period()
         self.week = _Period()
         self.losses_in_row = 0
@@ -120,10 +123,18 @@ class RiskManager(RiskGate):
         if len(engine.open_trades) >= r.max_open_positions:
             return self._no(f"Max positions: already {len(engine.open_trades)} open (limit {r.max_open_positions}).")
 
-        event = self.calendar.blocking_event(bar.ts, r.news_blackout_minutes)
+        event = self.calendar.blocking_event(bar.ts, r.news_blackout_minutes, plan.symbol)
         if event:
             name, at = event
             return self._no(f"News blackout: {name} at {at.tz_convert(ET):%H:%M} ET; no new entries within {r.news_blackout_minutes} minutes of it.")
+        if self.news is not None:
+            why = self.news.pause_at(plan.symbol, bar.ts)
+            if why:
+                return self._no(f"News pause: {why}")
+        until = getattr(engine, "shock_until_ns", {}).get(plan.symbol, 0)
+        if bar.ts_ns < until:
+            return self._no(f"Sudden move: {plan.symbol} just moved far more than normal in one minute; new entries paused until "
+                            f"{pd.Timestamp(until, tz='UTC').tz_convert(ET):%H:%M} ET.")
 
         per_trade = equity * r.risk_per_trade_pct / 100
         for g in r.correlated_groups:

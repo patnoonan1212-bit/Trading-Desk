@@ -30,6 +30,13 @@ class CorrelatedGroup(BaseModel):
     max_combined_risk_pct: float = Field(gt=0, le=10)
 
 
+class ShockPause(BaseModel):
+    """Sudden-move guard: a 1-minute bar this many times bigger than normal pauses new entries on that contract."""
+
+    range_multiple: float = Field(6.0, ge=0)   # 0 = off
+    minutes: int = Field(15, ge=0)
+
+
 class Risk(BaseModel):
     risk_per_trade_pct: float = Field(gt=0, le=5)
     max_daily_loss_pct: float = Field(gt=0, le=20)
@@ -43,6 +50,7 @@ class Risk(BaseModel):
     calendar_file: Path | None = None
     weekly_resume: Literal["auto", "manual"] = "auto"
     kill_switch: bool = False
+    shock_pause: ShockPause = ShockPause()
 
     @model_validator(mode="after")
     def _daily_at_least_one_trade(self) -> Risk:
@@ -165,6 +173,29 @@ class Paper(BaseModel):
     notify: Literal["trades", "alerts", "none"] = "trades"
 
 
+class Reasoning(BaseModel):
+    """The head trader: Claude reviews each trade idea that passed the Scanner and the Risk Manager."""
+
+    enabled: bool = True
+    model: str = "claude-opus-5-5"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    monthly_budget_usd: float = Field(20.0, ge=0)        # all Claude use together (reviews + news) stops at this
+    max_reviews_per_day: int = Field(30, ge=0)
+    when_unavailable: Literal["rules", "skip"] = "rules"  # no key / over budget / error: trade on the rules, or skip
+
+
+class News(BaseModel):
+    """News & Sentiment Agent."""
+
+    calendar_url: str = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+    feeds: list[str] = []
+    sentiment_every_minutes: int = Field(60, ge=5)
+    model: str = "claude-opus-5-5"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+    budget_share: float = Field(0.5, ge=0, le=1)    # news may use at most this share of the monthly budget
+    max_pause_minutes: int = Field(60, ge=0)        # longest pause the News Agent may call for a breaking story
+
+
 class Watchdog(BaseModel):
     """System health checks run after every paper-trading update."""
 
@@ -186,6 +217,8 @@ class Settings(BaseModel):
     data: Data
     logging: Logging = Logging()
     paper: Paper = Paper()
+    reasoning: Reasoning = Reasoning()
+    news: News = News()
     watchdog: Watchdog = Watchdog()
 
     @field_validator("contracts")

@@ -3,12 +3,13 @@
 Each update ("tick") does this:
 
   1. Data Agent: fetch the newest 1-minute bars from the free delayed feed, check and clean them, store them.
-  2. Replay: run the full desk (Regime, Scanner, Risk Manager, Execution with the simulated broker) over every
+     News Agent: refresh the economic calendar, read new headlines, and (hourly) ask Claude for the news mood.
+  2. Replay: run the full desk (Regime, Scanner, Risk Manager, head trader, Execution with the simulated broker) over every
      bar recorded since paper trading started, plus warm-up history so indicators are ready. Open trades stay
      open at the end.
   3. Compare with the journal of what was already announced. New decisions are appended to the journal (and
      the important ones posted to you); earlier decisions that no longer come out the same are reported.
-  4. Watchdog: health checks on data, schedule, positions, risk and history.
+  4. Watchdog: health checks on data, schedule, positions, risk, history, news feeds and Claude spending.
   5. Write the status page, the trade list and the notification text.
 
 Why replay instead of saving the agents' memory between updates: the recorded prices are the only state, so an
@@ -34,11 +35,14 @@ from pathlib import Path
 
 import pandas as pd
 
+from tradingdesk.agents.news import NewsAgent, http_get
+from tradingdesk.agents.reasoning import Overseer
 from tradingdesk.agents.risk import RiskManager
 from tradingdesk.agents.scanner import ScannerAgent
 from tradingdesk.agents.watchdog import Check, Watchdog
 from tradingdesk.backtest.engine import Backtester
 from tradingdesk.backtest.metrics import summarize, trades_frame
+from tradingdesk.calendar import EconomicCalendar
 from tradingdesk.config import Settings
 from tradingdesk.core.bus import EventBus
 from tradingdesk.core.events import Decision
@@ -46,6 +50,8 @@ from tradingdesk.data.providers.base import HistoricalProvider
 from tradingdesk.data.rollover import build_continuous
 from tradingdesk.data.store import DataStore
 from tradingdesk.data.validate import clean_bars
+from tradingdesk.llm import Claude, SpendLedger
+from tradingdesk.timeutil import ET
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +81,7 @@ class TickResult:
 
 
 class PaperTrader:
-    def __init__(self, settings: Settings, provider: HistoricalProvider | None = None) -> None:
+    def __init__(self, settings: Settings, provider: HistoricalProvider | None = None, claude: Claude | None = None, http=None) -> None:
         self.s = settings
         self.dir = Path(settings.paper.state_path)
         self.store = DataStore(self.dir / "data")
@@ -90,6 +96,8 @@ class PaperTrader:
                 provider = YahooProvider()
         self.provider = provider
         self.watchdog = Watchdog(settings)
+        self.claude = claude or Claude(settings.reasoning.monthly_budget_usd, SpendLedger(self.dir / "claude_spend.json"))
+        self.news = NewsAgent(settings, self.dir, self.claude, http or http_get)
 
     # ----- state files ---------------------------------------------------------------------------------
     def _state(self) -> dict:
@@ -137,6 +145,12 @@ class PaperTrader:
                 data[root] = cont
             res.checks += self.watchdog.data(root, cont, now, err, fallback)
         res.checks.append(self.watchdog.schedule(last_run, now))
+        self.news.update_calendar(now)
+        calendar = EconomicCalendar.load(self.s.risk.calendar_file, self.news.calendar_frame())
+        self.news.update_headlines(now)
+        self.news.update_sentiment(now, calendar)
+        res.checks += self.watchdog.news(self.news.status)
+        res.checks.append(self.watchdog.claude(self.claude, self.s))
 
         # 2. Replay
         # The kill switch blocks every trade not yet announced: anything after the newest price seen before it was turned on.
@@ -147,11 +161,16 @@ class PaperTrader:
         engine = gate = None
         decisions: list[Decision] = []
         if data:
-            gate = RiskManager(self.s)
+            gate = RiskManager(self.s, calendar, news=self.news.log)
             if st.get("kill_switch_since"):
                 gate.kill_switch_from_ns = pd.Timestamp(st["kill_switch_since"]).value + 1
-            engine = Backtester(self.s, [ScannerAgent(self.s)], data, bus=EventBus(), risk_gate=gate, trade_from=started, close_at_end=False)
-            result = engine.run()
+            reviewer = Overseer(self.s, self.claude, self.dir / "overseer.json", self.news.log, calendar)
+            engine = Backtester(self.s, [ScannerAgent(self.s)], data, bus=EventBus(), risk_gate=gate, trade_from=started,
+                                close_at_end=False, reviewer=reviewer)
+            try:
+                result = engine.run()
+            finally:
+                reviewer.save()  # keep paid-for reviews even if something later fails
             decisions = [d for d in result.decisions if d.ts is not None and pd.Timestamp(d.ts) >= started]
             res.equity = engine.equity()
             res.checks += self.watchdog.positions(engine)
@@ -179,7 +198,7 @@ class PaperTrader:
                     f.write(json.dumps({"key": decision_key(d), "announced_at": now.isoformat(), **d.to_dict()}, default=str) + "\n")
 
         # 4. Pages
-        res.status_md = self._status(res, engine, gate, closed, started)
+        res.status_md = self._status(res, engine, gate, closed, started, calendar)
         res.notify_md = self._notify(res, engine, closed)
         (self.dir / "status.md").write_text(res.status_md)
         (self.dir / "notify.md").write_text(res.notify_md)
@@ -190,7 +209,7 @@ class PaperTrader:
         return res
 
     # ----- writing ---------------------------------------------------------------------------------------
-    def _status(self, res: TickResult, engine, gate, closed: pd.DataFrame, started: pd.Timestamp) -> str:
+    def _status(self, res: TickResult, engine, gate, closed: pd.DataFrame, started: pd.Timestamp, calendar=None) -> str:
         eq0 = self.s.account.starting_equity
         worst = "alert" if any(c.status == "alert" for c in res.checks) else "warning" if any(c.status == "warning" for c in res.checks) else "ok"
         health = {"ok": "✅ All systems normal", "warning": "⚠️ Running, with warnings", "alert": "🚨 Needs attention"}[worst]
@@ -223,6 +242,18 @@ class PaperTrader:
                 md.append(f"| {pd.Timestamp(r.closed_at):%m-%d %H:%M} | {r.symbol} | {r.direction} | {r.setup} | ${r.net_pnl:,.0f} | {r.r:+.2f} | {r.exit} |")
         else:
             md.append("No closed trades yet. The desk is patient: it only trades setups scoring 50+ with 3:1 reward-to-risk.")
+        md += ["", "## News and the head trader", ""]
+        snap = self.news.log.snapshot_at(res.now)
+        if snap:
+            moods = ", ".join(f"{k} {v['mood']}" for k, v in snap.get("markets", {}).items())
+            md += [f"**News read at {pd.Timestamp(snap['ts']):%a %H:%M} UTC** ({snap['risk_level']} risk): {snap['summary']}", "", f"Mood: {moods}.", ""]
+        else:
+            md += ["No news read yet.", ""]
+        ahead = calendar.upcoming(res.now, 24) if calendar is not None else []
+        md.append("**Scheduled releases, next 24h:** " + (", ".join(f"{t.tz_convert(ET):%a %H:%M} ET {n}" for t, n in ahead) or "none") + ".")
+        spent, cap = self.claude.ledger.spent(), self.s.reasoning.monthly_budget_usd
+        md += ["", f"**Claude spending this month:** ${spent:,.2f} of ${cap:,.0f} "
+               f"(trade reviews ${self.claude.ledger.spent('reviews'):,.2f}, news ${self.claude.ledger.spent('news'):,.2f})."]
         md += ["", "## Watchdog", "", "| | Check | Detail |", "|---|---|---|"]
         md += [f"| {c.icon} | {c.name} | {c.message} |" for c in res.checks]
         recent = [d for d in self._journal() if (d["agent"], d["action"]) not in QUIET][-15:][::-1]
@@ -243,6 +274,11 @@ class PaperTrader:
             when = f"{pd.Timestamp(d.ts):%a %H:%M}"
             if d.agent == "risk" and d.action in ("alert", "halt"):
                 lines.append(f"🛑 {when} **Risk Manager:** {d.reason}")
+            elif d.agent == "risk" and d.action == "shock":
+                lines.append(f"⚡ {when} **Sudden move:** {d.reason}")
+            elif mode == "trades" and d.agent == "overseer" and d.details.get("source") == "claude":
+                verb = {"approved": "approved", "reduced": "made smaller", "rejected": "passed on"}.get(d.action, d.action)
+                lines.append(f"🧠 {when} **Head trader {verb} a {d.symbol} trade:** {d.reason}")
             elif mode == "trades" and d.agent == "risk" and d.action == "approved":
                 lines.append(f"📥 {when} **New trade, {d.symbol}:** {d.reason}")
             elif mode == "trades" and d.agent == "execution" and d.action == "closed":

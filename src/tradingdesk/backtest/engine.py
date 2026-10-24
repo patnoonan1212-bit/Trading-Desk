@@ -114,7 +114,7 @@ class _Feed:
 
 class Backtester:
     def __init__(self, settings: Settings, strategies: list[Strategy], data: dict[str, pd.DataFrame], bus: EventBus | None = None,
-                 risk_gate: RiskGate | None = None, trade_from=None, close_at_end: bool = True) -> None:
+                 risk_gate: RiskGate | None = None, trade_from=None, close_at_end: bool = True, reviewer=None) -> None:
         self.s = settings
         self.strategies = strategies
         self.data = data
@@ -122,6 +122,11 @@ class Backtester:
         self.risk_gate = risk_gate or RiskGate()
         self.execution = ExecutionAgent(settings, self.decide)
         self.close_at_end = close_at_end
+        self.reviewer = reviewer  # head trader (paper/live only): reviews ideas the rules have already approved
+        # Sudden-move guard: typical 1-minute range per contract, and when a pause after an outsized bar ends.
+        self._range_avg: dict[str, float] = {}
+        self._range_n: dict[str, int] = defaultdict(int)
+        self.shock_until_ns: dict[str, int] = {}
         # Bars before this time only warm up indicators; no trades are opened on them.
         self.trade_from_ns = None if trade_from is None else pd.Timestamp(trade_from).as_unit("ns").value
         self.realised = 0.0
@@ -224,6 +229,8 @@ class Backtester:
         for t in trades:
             self.realised += self.execution.work_orders(t, bar)
 
+        self._watch_shock(f.root, bar)
+
         # 3. Bar close: confirmations, timeouts, breakeven.
         for t in trades:
             if t.is_open:
@@ -249,6 +256,19 @@ class Backtester:
                     self._flush(t)
             for plan in strat.on_bar(f.root, htf, k, self):
                 self._consider(plan, f, bar)
+
+    def _watch_shock(self, root: str, bar: Bar) -> None:
+        sp = self.s.risk.shock_pause
+        if sp.range_multiple <= 0:
+            return
+        rng = bar.high - bar.low
+        avg = self._range_avg.get(root)
+        if avg is not None and self._range_n[root] >= 60 and avg > 0 and rng > sp.range_multiple * avg:
+            self.shock_until_ns[root] = bar.ts_ns + sp.minutes * 60 * 10**9
+            self.decide("risk", "shock", f"{root} moved {rng:.2f} in one minute, {rng / avg:.0f}x its normal range; "
+                        f"new entries paused for {sp.minutes} minutes.", root, bar.ts)
+        self._range_avg[root] = rng if avg is None else avg + (rng - avg) / 120
+        self._range_n[root] += 1
 
     def _flush(self, t: Trade) -> None:
         self.execution.report(t)
@@ -329,6 +349,15 @@ class Backtester:
         if verdict.max_budget is not None and verdict.max_budget < budget:
             self.decide("risk", "reduced", verdict.reason, sym, bar.ts, budget=budget, reduced_to=verdict.max_budget)
             budget = verdict.max_budget
+        if self.reviewer is not None:
+            rv = self.reviewer.review(plan, self, bar, budget)
+            if rv.action == "reject":
+                return self.decide("overseer", "rejected", rv.reason, sym, bar.ts, setup=plan.setup, source=rv.source)
+            if rv.action == "reduce":
+                self.decide("overseer", "reduced", rv.reason, sym, bar.ts, setup=plan.setup, factor=rv.size_factor, source=rv.source)
+                budget *= rv.size_factor
+            else:
+                self.decide("overseer", "approved", rv.reason, sym, bar.ts, setup=plan.setup, source=rv.source)
         record = TradeRecord(id=len(self.trades) + 1, symbol=sym, setup=plan.setup, direction=plan.direction, reason=plan.reason,
                              planned_at=bar.ts, session=bar.session, initial_stop=plan.stop, target=plan.target,
                              risk_points=plan.risk_points, is_reentry=is_reentry, context=dict(plan.context))

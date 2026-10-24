@@ -21,9 +21,12 @@ risk:
       max_combined_risk_pct: 2.0
   min_reward_risk: 3.0          # scanner only passes setups with at least 3:1 potential
   news_blackout_minutes: 10     # no new entries this long before and after high-impact news
-  calendar_file: config/economic_calendar.csv   # scheduled high-impact releases (the News Agent takes over in Phase 4)
+  calendar_file: config/economic_calendar.csv   # scheduled releases for backtests; paper trading adds the live calendar
   weekly_resume: auto           # after the weekly limit: auto = resume next week (backtests), manual = wait for you (live)
   kill_switch: false            # true = no new trades at all
+  shock_pause:                  # sudden-move guard (unscheduled news): pause new entries on that contract
+    range_multiple: 6           # ... when one minute moves this many times its normal range (0 = off)
+    minutes: 15                 # ... for this long
 
 contracts: [MES, MNQ, MCL, MGC]
 
@@ -111,6 +114,35 @@ paper:
   state_path: paper-state         # where the paper account's prices, journal and status are kept
   warmup_days: 29                 # history loaded on the first run so indicators are ready immediately
   notify: trades                  # trades: post when trades open/close and on alerts | alerts: alerts only | none
+
+# Head trader (Phase 4): Claude reviews every trade idea that passed the Scanner and the Risk Manager, with the
+# chart, news, calendar and account in front of it. It can approve, make the trade smaller, or veto it. It can never
+# make a trade bigger or loosen a stop, and the Risk Manager's limits still apply. Paper and live only: it is not
+# used in backtests, because Claude already knows how past markets turned out.
+# Needs the ANTHROPIC_API_KEY secret. Without it the desk trades on the rules alone.
+reasoning:
+  enabled: true
+  model: claude-opus-5-5          # Anthropic's current default model; claude-sonnet-5-5 or claude-haiku-5-5 cost less
+  effort: medium                  # how hard it thinks: low | medium | high | xhigh | max
+  monthly_budget_usd: 20          # all Claude use together stops for the month at this amount
+  max_reviews_per_day: 30
+  when_unavailable: rules         # no key, over budget or an error: rules = trade on Scanner + Risk Manager, skip = no trade
+
+# News & Sentiment Agent (Phase 4): live economic calendar, headlines and market mood.
+news:
+  calendar_url: https://nfs.faireconomy.media/ff_calendar_thisweek.json   # free weekly calendar (Forex Factory)
+  feeds:                          # free headline feeds (RSS)
+    - https://www.federalreserve.gov/feeds/press_all.xml
+    - https://feeds.content.dowjones.io/public/rss/mw_topstories
+    - https://feeds.content.dowjones.io/public/rss/mw_marketpulse
+    - https://www.cnbc.com/id/100003114/device/rss/rss.html
+    - https://www.cnbc.com/id/20910258/device/rss/rss.html
+    - https://oilprice.com/rss/main
+  sentiment_every_minutes: 60     # how often Claude reads new headlines
+  model: claude-opus-5-5
+  effort: low
+  budget_share: 0.5               # news may use at most half of the monthly Claude budget
+  max_pause_minutes: 60           # longest trading pause the News Agent may call for a breaking story
 
 watchdog:
   max_data_delay_minutes: 40      # alert if the newest price is older than this while the market is open
