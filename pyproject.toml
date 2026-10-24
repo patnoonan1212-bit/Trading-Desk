@@ -18,6 +18,7 @@ dependencies = [
   "pytz",  # DuckDB needs it for time-zone-aware timestamps
   "pandas_market_calendars>=4.4",
   "matplotlib>=3.8",
+  "ruamel.yaml>=0.18",  # edits the settings file without losing its comments (Learning Agent suggestions)
 ]
 
 [project.optional-dependencies]

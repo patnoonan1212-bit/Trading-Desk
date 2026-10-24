@@ -161,14 +161,9 @@ class PaperTrader:
         engine = gate = None
         decisions: list[Decision] = []
         if data:
-            gate = RiskManager(self.s, calendar, news=self.news.log)
-            if st.get("kill_switch_since"):
-                gate.kill_switch_from_ns = pd.Timestamp(st["kill_switch_since"]).value + 1
             reviewer = Overseer(self.s, self.claude, self.dir / "overseer.json", self.news.log, calendar)
-            engine = Backtester(self.s, [ScannerAgent(self.s)], data, bus=EventBus(), risk_gate=gate, trade_from=started,
-                                close_at_end=False, reviewer=reviewer)
             try:
-                result = engine.run()
+                engine, gate, result = self.replay(data, started, calendar, reviewer, st.get("kill_switch_since"))
             finally:
                 reviewer.save()  # keep paid-for reviews even if something later fails
             decisions = [d for d in result.decisions if d.ts is not None and pd.Timestamp(d.ts) >= started]
@@ -202,13 +197,80 @@ class PaperTrader:
         res.notify_md = self._notify(res, engine, closed)
         (self.dir / "status.md").write_text(res.status_md)
         (self.dir / "notify.md").write_text(res.notify_md)
+        self._dashboard(res, engine, gate, closed, started, calendar, result.equity if engine else pd.Series(dtype=float))
         if data:
             st["last_bar"] = max(c.index[-1] for c in data.values()).isoformat()
         st.update(started_at=started.isoformat(), last_run=now.isoformat(), diverged=missing, equity=round(res.equity, 2))
         self._save_state(st)
         return res
 
+    def replay(self, data: dict[str, pd.DataFrame], started: pd.Timestamp, calendar: EconomicCalendar, reviewer=None,
+               kill_switch_since: str | None = None):
+        """Run the desk over the recorded prices. Returns (engine, risk manager, result)."""
+        gate = RiskManager(self.s, calendar, news=self.news.log)
+        if kill_switch_since:
+            gate.kill_switch_from_ns = pd.Timestamp(kill_switch_since).value + 1
+        engine = Backtester(self.s, [ScannerAgent(self.s)], data, bus=EventBus(), risk_gate=gate, trade_from=started,
+                            close_at_end=False, reviewer=reviewer)
+        return engine, gate, engine.run()
+
+    def stored_data(self) -> dict[str, pd.DataFrame]:
+        """The recorded prices as continuous series, without fetching anything new."""
+        out = {}
+        for root in self.s.contracts:
+            raw = self.store.read_bars(root)
+            if len(raw):
+                out[root] = build_continuous(raw, self.s.data.roll.confirm_days)
+        return out
+
+    def stored_calendar(self) -> EconomicCalendar:
+        return EconomicCalendar.load(self.s.risk.calendar_file, self.news.calendar_frame())
+
+    def started_at(self) -> pd.Timestamp | None:
+        st = self._state()
+        return pd.Timestamp(st["started_at"]) if "started_at" in st else None
+
     # ----- writing ---------------------------------------------------------------------------------------
+    def _dashboard(self, res: TickResult, engine, gate, closed, started, calendar, equity: pd.Series) -> None:
+        """Write the dashboard page (site/index.html) for GitHub Pages."""
+        from tradingdesk import dashboard
+
+        positions = []
+        for t in (engine.open_trades if engine else []):
+            if not t.position:
+                continue
+            last = engine.last_close.get(t.plan.symbol, t.avg_entry)
+            positions.append({"symbol": t.plan.symbol, "side": "long" if t.side == 1 else "short", "contracts": t.position,
+                              "entry": t.avg_entry, "stop": t.stop, "target": t.plan.target, "setup": t.plan.setup.replace("_", " "),
+                              "pnl": (last - t.avg_entry) * t.side * t.position * t.pv})
+        reviews, counts = {}, {"total": 0}
+        for j in self._journal():
+            if j["agent"] == "overseer":
+                claude = j.get("details", {}).get("source") == "claude"
+                reviews[f"{pd.Timestamp(j['ts']).isoformat()}|{j['symbol']}|{j['details'].get('setup')}"] = \
+                    {"approved": "approved", "reduced": "made smaller", "rejected": "passed"}.get(j["action"], j["action"]) \
+                    if claude else "not reviewed (rules only)"
+                if claude:
+                    counts["total"] += 1
+                    counts[j["action"]] = counts.get(j["action"], 0) + 1
+        learning_p = Path(self.s.paper.learning_file)
+        learning = json.loads(learning_p.read_text()) if learning_p.exists() else None
+        worst = "alert" if any(c.status == "alert" for c in res.checks) else "warning" if any(c.status == "warning" for c in res.checks) else "ok"
+        ledger = self.claude.ledger
+        data = dashboard.build_data(
+            now=res.now, started=started, equity=res.equity, start_equity=self.s.account.starting_equity,
+            day_start_equity=getattr(getattr(gate, "day", None), "start_equity", None) or res.equity,
+            open_risk=sum(RiskManager.open_risk(t) for t in engine.open_trades) if engine else 0.0,
+            positions=positions, equity_curve=equity[equity.index >= started] if len(equity) else equity,
+            closed=closed, reviews=reviews, checks=res.checks, news_snapshot=self.news.log.snapshot_at(res.now),
+            upcoming=[{"ts": t.isoformat(), "event": n} for t, n in (calendar.upcoming(res.now, 24) if calendar is not None else [])],
+            spend={"spent": ledger.spent(), "reviews": ledger.spent("reviews"), "news": ledger.spent("news"),
+                   "budget": self.s.reasoning.monthly_budget_usd, "connected": self.claude.available},
+            learning=learning, health=worst, reviews_count=counts)
+        site = self.dir / "site"
+        site.mkdir(parents=True, exist_ok=True)
+        (site / "index.html").write_text(dashboard.render(data))
+
     def _status(self, res: TickResult, engine, gate, closed: pd.DataFrame, started: pd.Timestamp, calendar=None) -> str:
         eq0 = self.s.account.starting_equity
         worst = "alert" if any(c.status == "alert" for c in res.checks) else "warning" if any(c.status == "warning" for c in res.checks) else "ok"

@@ -5,6 +5,9 @@
 # Watchdog and updates the "Paper trading desk" issue (Issues tab). Trades and alerts are posted there as
 # comments, so GitHub notifies you by email or the mobile app.
 #
+# The dashboard (a web page with charts) is rebuilt every run and published with GitHub Pages about once an hour,
+# and whenever there's news. It needs Pages switched on once: Settings -> Pages -> Source: GitHub Actions.
+#
 # To start over with a fresh $50,000 paper account: Actions -> Paper trading -> Run workflow -> tick "Start fresh".
 # To stop new trades: set risk.kill_switch to true in config/default.yaml. To stop the runs entirely:
 # Actions -> Paper trading -> "..." -> Disable workflow.
@@ -22,6 +25,8 @@ on:
 permissions:
   contents: read
   issues: write
+  pages: write
+  id-token: write
 concurrency:
   group: paper-trading
   cancel-in-progress: false
@@ -29,6 +34,8 @@ jobs:
   tick:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      publish: ${{ steps.publish.outputs.publish }}
     env:
       GH_TOKEN: ${{ github.token }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional: turns on the head trader and news reading
@@ -68,3 +75,25 @@ jobs:
           if [ -s paper-state/notify.md ]; then
             gh api "repos/$repo/issues/$num/comments" -F body=@paper-state/notify.md >/dev/null
           fi
+      - name: Decide whether to publish the dashboard
+        id: publish
+        run: |
+          # Every run when there's news, otherwise about once an hour (GitHub limits how often Pages updates).
+          if [ -s paper-state/notify.md ] || [ "$(date -u +%M)" -lt 15 ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.publish.outputs.publish == 'true'
+        with:
+          path: paper-state/site
+  dashboard:
+    needs: tick
+    if: needs.tick.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true   # until Pages is switched on, publishing fails quietly instead of emailing you
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

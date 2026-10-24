@@ -171,6 +171,7 @@ class Paper(BaseModel):
     state_path: Path = Path("paper-state")
     warmup_days: int = Field(29, ge=1)   # history fetched on the first run so indicators are ready from the start
     notify: Literal["trades", "alerts", "none"] = "trades"
+    learning_file: Path = Path("learning/latest.json")   # the latest learning review, shown on the dashboard
 
 
 class Reasoning(BaseModel):

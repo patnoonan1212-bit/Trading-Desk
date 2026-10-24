@@ -8,6 +8,8 @@
     desk walkforward    --start 2022-01-01 --end 2025-01-01
     desk live check     (is the free delayed price feed answering?)
     desk paper tick     (one paper-trading update: fetch prices, replay, Watchdog, status page)
+    desk learn          --paper-state paper-state --out learning   (weekly learning review)
+    desk learn-apply    --report learning/latest.json              (put passed suggestions into the settings file)
 """
 
 from __future__ import annotations
@@ -225,6 +227,50 @@ def cmd_paper_tick(args) -> int:
     return 0
 
 
+def cmd_learn(args) -> int:
+    from tradingdesk.agents.learning import LearningAgent, report_markdown, write
+
+    s = _settings(args, mode="backtest")
+    history = None
+    if not args.no_history:
+        agent = _agent(s, EventBus())
+        history = {}
+        for sym in s.contracts:
+            if args.synthetic and agent.store.coverage(sym) is None and args.start:
+                agent.download(sym, args.start, args.end)
+            try:
+                history[sym] = agent.continuous(sym, args.start, args.end, rebuild=args.synthetic)
+            except LookupError:
+                pass
+        history = {k: v for k, v in history.items() if len(v)} or None
+    rep = LearningAgent(s, args.min_trades).review(history, args.paper_state)
+    write(rep, args.out)
+    print(report_markdown(rep))
+    return 0
+
+
+def cmd_learn_apply(args) -> int:
+    """Apply the suggestions that passed their test and still match the current settings. Writes the PR text."""
+    from tradingdesk.agents.learning import changes_unchanged, load_proposals
+    from tradingdesk.config import DEFAULT_CONFIG
+    from tradingdesk.config_edit import apply_to_file
+
+    path = Path(args.config or DEFAULT_CONFIG)
+    s = load_settings(path)
+    chosen = [p for p in load_proposals(args.report) if p.status == "passed" and (not args.ids or p.id in args.ids) and changes_unchanged(s, p)]
+    body = ["The Learning Agent suggests these setting changes. Each one was tested on market history that was not used "
+            "to find it, and improved the result there.", "",
+            "**Merge** this pull request to accept them, or **close** it to leave the settings as they are.", ""]
+    for p in chosen:
+        lines = apply_to_file(path, p.changes)
+        body += [f"### {p.id}: {p.title}", "", p.why, "", f"- Evidence: {p.evidence}", f"- Test: {p.test}"]
+        body += [f"- `{x}`" for x in lines] + [""]
+    body += ["The full learning review is in `learning/report.md`."]
+    Path(args.body).write_text("\n".join(body) + "\n")
+    print(f"{len(chosen)} suggestion(s) applied to {path}")
+    return 0 if chosen else 3
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="desk", description="Trading desk command line")
     p.add_argument("--config", default=None, help="settings file (default: config/default.yaml)")
@@ -282,6 +328,21 @@ def main(argv: list[str] | None = None) -> int:
     pt.add_argument("--state", default=None, help="folder for the paper account (default from config)")
     pt.add_argument("--now", default=None, help=argparse.SUPPRESS)
     pt.set_defaults(func=cmd_paper_tick)
+
+    le = sub.add_parser("learn", help="weekly learning review: what works, what doesn't, suggested changes")
+    le.add_argument("--paper-state", default=None, help="paper trading folder to learn from")
+    le.add_argument("--out", default="learning")
+    le.add_argument("--min-trades", type=int, default=30)
+    le.add_argument("--start", default=None)
+    le.add_argument("--end", default=None)
+    le.add_argument("--no-history", action="store_true", help="don't use downloaded market history")
+    le.add_argument("--synthetic", action="store_true")
+    le.set_defaults(func=cmd_learn)
+    la = sub.add_parser("learn-apply", help="apply suggestions that passed their test to the settings file")
+    la.add_argument("--report", default="learning/latest.json")
+    la.add_argument("--ids", nargs="*", default=None)
+    la.add_argument("--body", default="pr-body.md", help="where to write the pull request text")
+    la.set_defaults(func=cmd_learn_apply)
 
     args = p.parse_args(argv)
     setup_logging("INFO", None)

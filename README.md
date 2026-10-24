@@ -16,8 +16,8 @@ the code can switch it on for you.
 | 2 | Scanner, Market Regime and Risk Manager agents (backtest only) | ✅ built and tested |
 | 3 | Execution Agent, paper trading on live data, Watchdog | ✅ built and tested |
 | 4 | Head trader (Claude) and News & Sentiment agents | ✅ built and tested |
-| 5 | Learning Agent and dashboard | next |
-| 6 | Cloud server, phone alerts, live-trading readiness | |
+| 5 | Learning Agent and dashboard | ✅ built and tested |
+| 6 | Cloud server, phone alerts, live-trading readiness | next |
 
 The backtests now use the real decision chain: the **Market Regime Agent** reads the market, the **Scanner**
 finds setups that suit it, and the **Risk Manager** can approve, shrink or veto every trade. Nothing has been
@@ -141,6 +141,36 @@ shows what's been spent. When the cap is reached, or without a key, the desk kee
 Claude is not used in backtests: it already knows how past markets turned out, so its reviews of old trades
 would look better than they could ever be in real time. Its value can only be judged in paper trading, by
 comparing the trades it approved with the ones it passed on (that comparison comes with the Learning Agent in Phase 5).
+
+## Dashboard and the Learning Agent (Phase 5)
+
+**Dashboard.** A web page with everything in one place: equity and the worst drop so far, open positions, recent
+trades with the head trader's call on each, results by setup, the news, system health and what the desk is learning.
+It works on a phone and follows your phone's light or dark mode. It is rebuilt every update and published about
+once an hour.
+
+One-time switch: **Settings → Pages → Build and deployment → Source: GitHub Actions**. The address is then
+`https://patnoonan1212-bit.github.io/Trading-Desk/`. Like the status issue it is public and shows only paper trades.
+
+**Learning Agent.** Every Saturday (or **Actions → Learning review → Run workflow**) it studies every closed trade:
+- results by setup, market regime, volatility, session, hour, weekday, direction and Scanner score, each with a
+  plain verdict. A group needs 30+ trades before it counts at all.
+- exits: how often trades ran to 1R and 2R, and how often a stopped-out trade reached its target anyway.
+- the head trader: replays the paper period with the rules alone and shows whether Claude's calls added money.
+
+It then suggests setting changes, such as switching off a losing setup, not trading a setup in a regime where it loses,
+raising the minimum score, or giving stops more room. **Each suggestion is tested on market history that was not used to find
+it**, and only those that improve the result there are offered. Those go into a **pull request**
+(the Pull requests tab): it shows the exact lines it would change in the settings file and the evidence. Press
+**Merge** to accept or **Close** to decline. It never touches risk limits and never changes anything on its own.
+
+Until market history is downloaded (the Databento step), suggestions can't be tested, so the review only
+reports what it sees. The review is saved in [`learning/report.md`](learning/report.md) and posted on the
+paper trading issue.
+
+If GitHub won't let the workflow open the pull request itself, the run page gives you a link that opens it with one
+click. To let it open them directly: **Settings → Actions → General → Allow GitHub Actions to create and approve pull
+requests**.
 
 ## Settings
 

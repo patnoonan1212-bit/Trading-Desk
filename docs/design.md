@@ -158,3 +158,31 @@ trading.
 Scheduled releases come from a calendar (built-in dates for jobs, inflation and Fed decisions back to 2022, plus
 this week's live calendar). Unscheduled news is caught two ways: Claude reading headlines (paper and live), and the
 sudden-move guard, a plain price rule that also runs in backtests so its effect can be measured.
+
+# Phase 5
+
+## Learn on one stretch, test on another
+With dozens of ways to slice the trades, some slices always look great or terrible by chance. So the Learning
+Agent finds ideas on one set of trades (paper trades plus the first two thirds of history) and tests each idea
+by re-running the backtest on the last third, which it never looked at. An idea must add total R there without
+making the worst drop more than 1.5 points worse. Groups need 30+ trades before they count, and verdicts use a
+t-statistic, so "won 4 of 5" never becomes a rule.
+
+## Suggestions are settings, and you approve them
+Each suggestion is a short list of setting changes, applied to `config/default.yaml` with ruamel.yaml so comments
+and layout survive and the pull request shows exactly the lines that change. Risk limits are off-limits to the
+agent. A suggestion is skipped if you have changed that setting yourself since it was made. Merging is the only way
+a suggestion takes effect, which also leaves a clear history of what changed and why.
+
+## Judging the head trader fairly
+Claude can't be judged on history (it knows how history turned out), and its own paper results can't be judged
+in isolation. The Learning Agent replays the paper period with the same prices, news and risk rules but without
+Claude, and compares the accounts. For every idea Claude passed on or shrank, it shows what the rules alone would
+have made.
+
+## Dashboard: one static page
+The dashboard is a single HTML page with the data embedded and the charts drawn in plain JavaScript: no server, no
+database, no outside scripts, nothing to break or keep patched. It follows a tested data-visualisation method:
+one axis per chart, a blue/red pair only for gains and losses, status colours always paired with an icon and a
+word, a table view behind every chart, and separate colour choices for light and dark mode. GitHub Pages hosts it;
+it is published at most about hourly (more often when there's news) because Pages limits how often a site can update.
