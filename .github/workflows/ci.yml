@@ -14,4 +14,15 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev,databento]"
       - run: ruff check src tests
-      - run: pytest
+      - name: Run the tests
+        shell: bash
+        run: |
+          set +e
+          pytest -p no:warnings 2>&1 | tee pytest.log
+          status=${PIPESTATUS[0]}
+          if [ $status -ne 0 ]; then
+            # Show the end of the output as an error message on the run page.
+            msg=$(tail -40 pytest.log | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Tests failed::$msg"
+          fi
+          exit $status
