@@ -15,6 +15,7 @@ dependencies = [
   "numpy>=1.26",
   "duckdb>=1.0",
   "pyarrow>=15",
+  "pytz",  # DuckDB needs it for time-zone-aware timestamps
   "pandas_market_calendars>=4.4",
   "matplotlib>=3.8",
 ]

@@ -48,6 +48,11 @@ WATCH_BARS_AFTER_STOP = 1380  # about one trading day of 1-minute bars
 REENTRY_WINDOW_BARS = 60
 
 
+def _ns(index: pd.DatetimeIndex) -> np.ndarray:
+    """Timestamps as int64 nanoseconds, whatever resolution pandas chose to store them in."""
+    return index.as_unit("ns").asi8
+
+
 class RiskGate:
     """Hook for portfolio-level risk rules. Phase 1: allow everything. Phase 2: the Risk Manager Agent."""
 
@@ -144,7 +149,8 @@ class Backtester:
                 htf["trail_atr"] = atr(htf, self.s.execution.exits.trail.atr_period)
                 self.setup_bars[(root, si)] = htf
                 # The 1-minute bar on which each setup bar completes (its last minute).
-                done_at = np.searchsorted(cont.index.asi8, htf["end"].to_numpy("datetime64[ns]").astype("int64"), side="left") - 1
+                # Compare both in nanoseconds: pandas may store times at different resolutions.
+                done_at = np.searchsorted(_ns(cont.index), _ns(pd.DatetimeIndex(htf["end"])), side="left") - 1
                 for k, i in enumerate(done_at):
                     if i >= 0:
                         f.setups.setdefault(int(i), []).append((si, k))
@@ -156,7 +162,7 @@ class Backtester:
         feeds = self._prepare()
         if not feeds:
             raise ValueError("No data to backtest.")
-        keys = np.concatenate([f.ts.asi8 for f in feeds])
+        keys = np.concatenate([_ns(f.ts) for f in feeds])
         which = np.concatenate([np.full(len(f.ts), n) for n, f in enumerate(feeds)])
         idx = np.concatenate([np.arange(len(f.ts)) for f in feeds])
         order = np.argsort(keys, kind="stable")
@@ -349,6 +355,7 @@ class Backtester:
         mode = "thirds" if qty >= self.s.execution.scale_in.min_contracts_for_thirds else "single"
         trade = Trade(record, plan, f.broker, self.s.execution, budget, mode)
         record.mode = mode
+        record.risk_dollars = budget
         self.trades.append(trade)
         self.open[sym].append(trade)
         side = "long" if plan.direction == 1 else "short"

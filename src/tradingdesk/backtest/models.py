@@ -102,6 +102,7 @@ class TradeRecord:
     initial_stop: float
     target: float
     risk_points: float = 0.0
+    risk_dollars: float = 0.0          # the dollar risk budget for this trade (1R)
     planned_contracts: int = 0
     mode: str = "single"              # thirds | single
     fills: list[Fill] = field(default_factory=list)
@@ -128,6 +129,9 @@ class TradeRecord:
             peak = max(peak, pos)
         return peak
 
-    def r_multiple(self, point_value: float) -> float:
-        risk = self.risk_points * point_value * max(self.planned_contracts, 1)
+    def r_multiple(self, point_value: float | None = None) -> float:
+        """Result in units of the dollars risked: -1R is a full planned loss, +3R is three times the risk."""
+        if self.risk_dollars:
+            return self.net_pnl / self.risk_dollars
+        risk = self.risk_points * (point_value or 0) * max(self.planned_contracts, 1)
         return self.net_pnl / risk if risk else 0.0
