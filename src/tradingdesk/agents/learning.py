@@ -202,7 +202,17 @@ def propose(df: pd.DataFrame, s: Settings, min_trades: int) -> list[Proposal]:
             f"Trades the Scanner scored below {step} have lost money; those at {step} and above made money.",
             [Change("scanner.min_score", s.scanner.min_score, int(step))], f"below {step}: {ev(low)}; {step}+: {ev(high)}")
 
-    # 5. Stops too tight: many stopped-out trades went on to hit the target anyway.
+    # 5. Higher scores really do better: size by score (only ever less risk on weaker setups, never more than the cap).
+    if not s.execution.score_sizing.enabled:
+        weak, strong = df[score < 65], df[score >= 80]
+        if len(weak) >= min_trades and len(strong) >= min_trades and strong["r"].mean() - weak["r"].mean() >= 0.2 \
+                and strong["r"].mean() > 0:
+            add("Risk less on lower-scoring setups",
+                f"Setups the Scanner scored 80+ averaged {strong['r'].mean():+.2f}R against {weak['r'].mean():+.2f}R for those under 65, "
+                f"so weaker setups get smaller positions (0.75-1.1% risk). The best still risk at most {s.risk.risk_per_trade_pct}%.",
+                [Change("execution.score_sizing.enabled", False, True)], f"80+: {ev(strong)}; under 65: {ev(weak)}")
+
+    # 6. Stops too tight: many stopped-out trades went on to hit the target anyway.
     stopped = df[df["exit"].astype(str).str.contains("stopped out")]
     known = stopped["stopped_then_target"].dropna()
     buf = s.execution.stops.atr_buffer

@@ -37,6 +37,10 @@ GRIDS: dict[str, dict[str, list]] = {
     "mean_reversion": {"band_width": [2.0, 2.5]},
     "liquidity_sweep": {"lookback": [30, 60]},
     "squeeze_breakout": {"squeeze_pct": [0.10, 0.20]},
+    "opening_range": {"target_ranges": [1.5, 2.5]},
+    "prior_day_level": {"target_atr": [4.0, 8.0]},
+    "overnight_reject": {"max_poke_atr": [0.5, 1.0]},
+    "vwap_reclaim": {"target_atr": [4.0, 6.0]},
 }
 WARMUP = pd.Timedelta(days=21)  # history loaded before each window so indicators are ready on day one
 COMPLEXITY_PENALTY = 0.25       # t-statistic points per setting moved away from its default

@@ -142,6 +142,24 @@ Claude is not used in backtests: it already knows how past markets turned out, s
 would look better than they could ever be in real time. Its value can only be judged in paper trading, by
 comparing the trades it approved with the ones it passed on (that comparison comes with the Learning Agent in Phase 5).
 
+## How big is each trade?
+
+1. **Risk budget:** a trade may lose at most **1.5% of the account** if its stop is hit (about $750 on
+   $50,000), counting every entry plus fees and expected slippage.
+2. **Contracts:** that budget divided by what one contract would lose at the stop, rounded down. For example,
+   an MES stop 10 points away risks about $54 a contract, so 13 contracts.
+3. **Only ever smaller, never bigger:**
+   - **Drawdown brake:** 10% or more below the account's high, every trade risks half (0.75%) until it recovers.
+   - **MES and MNQ** share one 2% budget.
+   - **The head trader** can cut a trade to 25-75%.
+   - **Score-based sizing** (off until the Learning Agent shows higher scores really do better): setups scoring
+     50-64 risk 0.75%, 65-79 risk 1.1%, 80+ risk the full 1.5%.
+4. **Positions grow and shrink with the account**, because the budget is a percentage of it.
+
+Other protections: everything is **closed 30 minutes before Friday's close** (weekend news can make prices open
+far beyond a stop), and there are no new entries in that window. A **stale-trade exit** (close trades that have
+gone nowhere after a set time) is built but switched off until tested.
+
 ## Dashboard and the Learning Agent (Phase 5)
 
 **Dashboard.** A web page with everything in one place: equity and the worst drop so far, open positions, recent
@@ -258,6 +276,10 @@ All limits live in [`config/default.yaml`](config/default.yaml), with a comment 
 | `reasoning.when_unavailable` | rules | no key / over budget: rules = trade anyway, skip = no trade |
 | `news.max_pause_minutes` | 60 | longest pause the news desk may call for breaking news |
 | `risk.shock_pause` | 6x / 15 min | sudden-move guard |
+| `risk.drawdown_brake` | 10% / x0.5 | trade at half risk while 10%+ below the account's high |
+| `execution.weekend.flatten` | true | close everything 30 minutes before Friday's close |
+| `execution.stale_exit.hours` | 0 (off) | close trades that went nowhere after this many hours |
+| `execution.score_sizing.enabled` | false | risk less on lower-scoring setups (never more than 1.5%) |
 | `broker.name` | sim | sim = paper only; tradovate = also mirror trades at Tradovate |
 | `broker.environment` | demo | demo = practice money; live = real money (needs mode: live) |
 | `broker.dry_run` | true | write down orders instead of sending them |
@@ -283,8 +305,11 @@ All limits live in [`config/default.yaml`](config/default.yaml), with a comment 
 - **Market Regime Agent** looks at hourly bars and labels each market: trending up, trending down, ranging or
   in transition, and whether volatility is low, normal or high. Each setup only runs in the conditions it suits
   (for example, buying dips only in an uptrend; fading extremes only in a quiet range).
-- **Scanner** watches 15-minute bars for five setups: trend breakout, pullback in a trend, mean reversion,
-  liquidity sweep (a fake break of a high/low that snaps back) and squeeze breakout. Stops go beyond real market
+- **Scanner** watches 15-minute bars for nine setups: trend breakout, pullback in a trend, mean reversion,
+  liquidity sweep (a fake break of a high/low that snaps back), squeeze breakout, and four built on the levels
+  futures traders watch: opening-range breakout (the first 30 minutes of the main session), a break of
+  yesterday's high or low, a rejection of the overnight high or low, and a reclaim of the day's average price
+  (VWAP) in a trend. The last four were added recently and haven't been tested on real history yet. Stops go beyond real market
   structure and targets at real levels. Each setup gets a 0-100 score from trend alignment, volume, reward-to-risk
   and session, and only the best one per market is passed on.
 - **Risk Manager** has the final say on every trade, checked in this order: kill switch, circuit breaker,

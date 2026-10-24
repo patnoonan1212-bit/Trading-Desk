@@ -6,6 +6,9 @@ the setup and the Scanner's reasoning, the last few hours of 15-minute bars, the
 (equity, today's result, open positions, recent trades), upcoming scheduled releases, and the news desk's latest
 read and headlines, all as of the moment of the idea.
 
+It also gets the desk's memory: what the weekly Learning Agent found about this kind of trade (which setups,
+regimes and hours have worked), and how this setup has done in the desk's own recent trades.
+
 It answers approve, reduce (trade smaller, 25-75% of the normal size) or reject, with a plain-English reason.
 It can never make a trade bigger, move a stop or a target, or overrule the Risk Manager.
 
@@ -90,6 +93,8 @@ class Overseer:
         self.calendar = calendar
         self.path = Path(cache_path) if cache_path else None
         self.cache: dict[str, dict] = json.loads(self.path.read_text()) if self.path and self.path.exists() else {}
+        lp = Path(settings.paper.learning_file)
+        self.learning: dict = json.loads(lp.read_text()) if lp.exists() else {}
         self.asked = 0
 
     def save(self) -> None:
@@ -178,6 +183,7 @@ class Overseer:
         closed = [t.record for t in engine.trades if not t.is_open and t.record.fills][-5:]
         if closed:
             out.append("Last closed trades: " + "; ".join(f"{r.symbol} {r.setup.replace('_', ' ')} {r.net_pnl:+,.0f}$" for r in closed) + ".")
+        out += self._memory(plan, engine)
         cal = self.calendar or getattr(gate, "calendar", None)
         if cal is not None:
             ahead = cal.upcoming(bar.ts, 8, plan.symbol)
@@ -192,6 +198,29 @@ class Overseer:
                            f"{plan.symbol}: {m.get('mood', 'n/a')}{' - ' + m['note'] if m.get('note') else ''}")
             out += [f"- {pd.Timestamp(h['published']).tz_convert(ET):%H:%M} [{h['source']}] {h['title']}" for h in heads] or ["- no recent headlines"]
         return "\n".join(out)
+
+    def _memory(self, plan, engine) -> list[str]:
+        """What the desk has learned that bears on this idea."""
+        lines = []
+        name, trend = plan.setup, (plan.context or {}).get("trend", "")
+        mine = [t.record for t in engine.trades if not t.is_open and t.record.fills and t.record.setup == name][-10:]
+        if mine:
+            rs = [r.net_pnl / r.risk_dollars if r.risk_dollars else 0.0 for r in mine]
+            lines.append(f"This desk's last {len(mine)} {name.replace('_', ' ')} trades: {sum(x > 0 for x in rs)} winners, "
+                         f"average {sum(rs) / len(rs):+.2f}R.")
+        peak = getattr(engine, "peak_equity", 0) or 0
+        if peak and engine.equity() < peak:
+            lines.append(f"The account is {(peak - engine.equity()) / peak * 100:.1f}% below its high.")
+        found = []
+        for g in self.learning.get("groups", []):
+            gname = str(g.get("name", ""))
+            relevant = gname == name or gname.startswith(name + " ") or (g.get("area") == "Market regime" and gname == trend)
+            if relevant and g.get("verdict") not in (None, "too early", "no clear edge"):
+                found.append(f"- {g['area']}: {gname.replace('_', ' ')}, {g['trades']} trades, average {g['exp_r']:+.2f}R ({g['verdict']})")
+        if found:
+            when = str(self.learning.get("generated", ""))[:10]
+            lines += [f"Learning Agent findings (review of {when}, based on {self.learning.get('trades', '?')} trades):"] + found[:6]
+        return (["", "## Desk memory"] + lines) if lines else []
 
     @staticmethod
     def _recent_bars(engine, plan, bar, n: int = 24) -> pd.DataFrame | None:

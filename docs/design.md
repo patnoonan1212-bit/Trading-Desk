@@ -219,3 +219,28 @@ set up or a send fails, and a failed send is itself a Watchdog alert.
 The Tradovate client follows Tradovate's published REST and WebSocket API and is tested against a simulated
 Tradovate. It has not run against a real account. The read-only "Check Tradovate" button is the first step once a
 demo account exists, and the checklist requires two clean weeks on demo before live is possible.
+
+# After Phase 6: a better team
+
+## Protection first, on by default
+The drawdown brake (half risk while 10% below the high) and the Friday close are on by default. Both only ever
+reduce risk: the brake makes a losing stretch shallower and shorter to recover from, and closing before the weekend
+removes the one risk a stop can't handle, a gap past it. The stale-trade exit changes which trades win, not just
+how much is at risk, so it stays off until the walk-forward has tested it.
+
+## Sizing by score: less on weaker setups, never more than the cap
+Higher conviction is expressed by risking *less* on weaker setups, never more than the 1.5% rule on the best ones.
+It starts off. The Learning Agent proposes switching it on only when setups scoring 80+ have clearly beaten those
+under 65 on enough trades, and the proposal must still pass the held-back history test. Claude's own confidence
+never changes size: a language model's sense of certainty isn't a calibrated probability.
+
+## The head trader gets the desk's memory
+Each review now includes what the weekly learning review found about this setup and regime, and how the setup did
+in the desk's own recent trades. Only findings that bear on the idea are included, so the prompt stays short.
+
+## Four level-based setups
+Opening range, previous-day high/low, overnight high/low and VWAP are where many futures traders place orders,
+which is what can make these levels matter. Each level is computed only from finished bars and becomes available
+only once it's known (the opening range from 30 minutes after the open, the overnight range from the open). Main
+session opening times differ by contract (stock indexes 9:30, crude 9:00, gold 8:20 New York time). They are on in
+paper trading so they gather evidence; the walk-forward test will judge them once real history is downloaded.

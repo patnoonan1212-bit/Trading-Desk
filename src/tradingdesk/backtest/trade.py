@@ -159,6 +159,21 @@ class Trade:
         self.record.exit_reasons.append(reason)
         self.note(ts, "closed", reason)
 
+    def force_exit(self, bar: Bar, reason: str) -> None:
+        """Leave now at market (weekend, stale trade): stop adding, cancel targets, close what's held."""
+        if self.state == "closed":
+            return
+        self.cancel("entry")
+        self.cancel("add")
+        self.cancel("partial")
+        if not self.position:
+            self.close(bar.ts, reason)
+        elif not self.working("exit"):
+            self.exit_reason = reason
+            self.place("exit", -self.side, self.position, "market", None, bar)
+            self.state = "full"
+            self.note(bar.ts, "exit", f"Closing {self.position} contract(s): {reason}.")
+
     def on_bar_close(self, bar: Bar, budget_left: float) -> None:
         """Confirm-timeframe (1-minute) bar closed: confirmation, timeout, breakeven and excursion tracking."""
         if self.state == "closed":

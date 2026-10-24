@@ -43,7 +43,7 @@ from tradingdesk.core.bus import EventBus
 from tradingdesk.core.events import Decision
 from tradingdesk.data.resample import resample
 from tradingdesk.indicators import atr
-from tradingdesk.timeutil import in_window, sessions_of
+from tradingdesk.timeutil import ET, in_window, sessions_of
 
 log = logging.getLogger(__name__)
 
@@ -127,6 +127,7 @@ class Backtester:
         self._range_avg: dict[str, float] = {}
         self._range_n: dict[str, int] = defaultdict(int)
         self.shock_until_ns: dict[str, int] = {}
+        self.peak_equity = settings.account.starting_equity
         # Bars before this time only warm up indicators; no trades are opened on them.
         self.trade_from_ns = None if trade_from is None else pd.Timestamp(trade_from).as_unit("ns").value
         self.realised = 0.0
@@ -204,7 +205,9 @@ class Backtester:
             self._step(f, bar)
             snap = bar.ts_ns // _FIFTEEN_MIN
             if snap != last_snap:
-                equity_points.append((bar.ts, self.equity()))
+                eq = self.equity()
+                self.peak_equity = max(self.peak_equity, eq)
+                equity_points.append((bar.ts, eq))
                 last_snap = snap
 
         end_ts = max(f.ts[-1] for f in feeds)
@@ -230,6 +233,7 @@ class Backtester:
             self.realised += self.execution.work_orders(t, bar)
 
         self._watch_shock(f.root, bar)
+        self._timed_exits(f, bar)
 
         # 3. Bar close: confirmations, timeouts, breakeven.
         for t in trades:
@@ -256,6 +260,37 @@ class Backtester:
                     self._flush(t)
             for plan in strat.on_bar(f.root, htf, k, self):
                 self._consider(plan, f, bar)
+
+    def _before_weekend(self, bar: Bar) -> bool:
+        w = self.s.execution.weekend
+        if not w.flatten:
+            return False
+        et = bar.ts.tz_convert(ET)
+        return et.weekday() == 4 and et.hour * 60 + et.minute >= 17 * 60 - w.minutes_before_close and et.hour < 17
+
+    def _timed_exits(self, f: _Feed, bar: Bar) -> None:
+        """Weekend close and stale-trade exits."""
+        trades = [t for t in self.open[f.root] if t.is_open]
+        if not trades:
+            return
+        if self._before_weekend(bar):
+            for t in trades:
+                t.force_exit(bar, "closed before the weekend, when gaps can jump past a stop")
+                self._flush(t)
+            return
+        se = self.s.execution.stale_exit
+        if se.hours <= 0:
+            return
+        for t in trades:
+            opened = t.record.opened_at
+            if not t.position or opened is None or t.breakeven_done or t.working("exit"):
+                continue
+            if bar.ts_ns - pd.Timestamp(opened).value < se.hours * 3600 * 10**9:
+                continue
+            progress = (bar.close - t.avg_entry) * t.side / t.r_points() if t.r_points() else 0.0
+            if abs(progress) <= se.max_progress_r:
+                t.force_exit(bar, f"went nowhere for {se.hours:g} hours ({progress:+.1f}R)")
+                self._flush(t)
 
     def _watch_shock(self, root: str, bar: Bar) -> None:
         sp = self.s.risk.shock_pause
@@ -334,6 +369,8 @@ class Backtester:
             return reject(f"{plan.setup}: reward-to-risk {plan.reward_risk:.1f} is below the {rr_min:.0f}:1 minimum.")
         if bar.session == "break":
             return reject("No new entries during the daily maintenance break.")
+        if self._before_weekend(bar):
+            return reject("No new entries this close to the weekend: positions are closed before Friday's close.")
         windows = self.s.sessions.entry_windows
         if windows != "all" and not any(in_window(bar.ts, w.start, w.end) for w in windows):
             return reject("Outside the configured entry windows.")
@@ -345,7 +382,19 @@ class Backtester:
         if not verdict.allowed:
             return reject(verdict.reason)
 
-        budget = self.equity() * self.s.risk.risk_per_trade_pct / 100
+        eq = self.equity()
+        self.peak_equity = max(self.peak_equity, eq)
+        pct = self.s.execution.score_sizing.pct_for(plan.context.get("score"), self.s.risk.risk_per_trade_pct)
+        if pct < self.s.risk.risk_per_trade_pct:
+            self.decide("risk", "sized", f"Scanner score {plan.context.get('score'):.0f}: risking {pct:g}% "
+                        f"instead of {self.s.risk.risk_per_trade_pct:g}% (score-based sizing).", sym, bar.ts, setup=plan.setup)
+        brake = self.s.risk.drawdown_brake
+        dd = (self.peak_equity - eq) / self.peak_equity * 100 if self.peak_equity > 0 else 0.0
+        if brake.start_pct > 0 and dd >= brake.start_pct:
+            pct *= brake.risk_multiplier
+            self.decide("risk", "brake", f"Drawdown brake: the account is {dd:.1f}% below its high of ${self.peak_equity:,.0f}, "
+                        f"so this trade risks {pct:.2f}% instead of the usual amount.", sym, bar.ts, setup=plan.setup)
+        budget = eq * pct / 100
         if verdict.max_budget is not None and verdict.max_budget < budget:
             self.decide("risk", "reduced", verdict.reason, sym, bar.ts, budget=budget, reduced_to=verdict.max_budget)
             budget = verdict.max_budget

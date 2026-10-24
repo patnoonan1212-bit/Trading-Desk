@@ -37,6 +37,13 @@ class ShockPause(BaseModel):
     minutes: int = Field(15, ge=0)
 
 
+class DrawdownBrake(BaseModel):
+    """Trade smaller while the account is well below its high: risk per trade x risk_multiplier."""
+
+    start_pct: float = Field(10.0, ge=0)            # 0 = off
+    risk_multiplier: float = Field(0.5, gt=0, le=1)
+
+
 class Risk(BaseModel):
     risk_per_trade_pct: float = Field(gt=0, le=5)
     max_daily_loss_pct: float = Field(gt=0, le=20)
@@ -51,6 +58,7 @@ class Risk(BaseModel):
     weekly_resume: Literal["auto", "manual"] = "auto"
     kill_switch: bool = False
     shock_pause: ShockPause = ShockPause()
+    drawdown_brake: DrawdownBrake = DrawdownBrake()
 
     @model_validator(mode="after")
     def _daily_at_least_one_trade(self) -> Risk:
@@ -114,6 +122,42 @@ class MinLiquidity(BaseModel):
     min_volume_1m: int = Field(ge=0)
 
 
+class Weekend(BaseModel):
+    """Close everything shortly before the Friday close, so a weekend gap can't jump past a stop."""
+
+    flatten: bool = True
+    minutes_before_close: int = Field(30, ge=1)
+
+
+class StaleExit(BaseModel):
+    """Close a trade that has gone nowhere: open this long, never reached breakeven, within +/- max_progress_r."""
+
+    hours: float = Field(0.0, ge=0)                 # 0 = off
+    max_progress_r: float = Field(0.5, ge=0)
+
+
+class ScoreTier(BaseModel):
+    min_score: float
+    risk_pct: float = Field(gt=0)
+
+
+class ScoreSizing(BaseModel):
+    """Risk less on lower-scoring setups. Never more than risk.risk_per_trade_pct."""
+
+    enabled: bool = False
+    tiers: list[ScoreTier] = [ScoreTier(min_score=50, risk_pct=0.75), ScoreTier(min_score=65, risk_pct=1.1),
+                              ScoreTier(min_score=80, risk_pct=1.5)]
+
+    def pct_for(self, score: float | None, cap: float) -> float:
+        if not self.enabled or score is None:
+            return cap
+        best = None
+        for t in sorted(self.tiers, key=lambda t: t.min_score):
+            if score >= t.min_score:
+                best = t.risk_pct
+        return min(cap, best if best is not None else cap)
+
+
 class Execution(BaseModel):
     scale_in: ScaleIn
     exits: Exits
@@ -121,6 +165,9 @@ class Execution(BaseModel):
     max_reentries: int = Field(ge=0)
     min_liquidity: MinLiquidity
     max_contracts_per_order: int = Field(100, ge=1)  # safety cap: the Execution Agent refuses anything bigger
+    weekend: Weekend = Weekend()
+    stale_exit: StaleExit = StaleExit()
+    score_sizing: ScoreSizing = ScoreSizing()
 
 
 class Regime(BaseModel):
