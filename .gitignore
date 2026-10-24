@@ -7,7 +7,9 @@ __pycache__/
 build/
 dist/
 # Market data and run output stay out of git (they are large and can be re-downloaded).
-data/
-reports/
-logs/
+/data/
+/data-synthetic/
+/reports/
+/logs/
+/report/
 .env
