@@ -156,6 +156,44 @@ def cmd_walkforward(args) -> int:
     return 0
 
 
+def cmd_live_check(args) -> int:
+    """Ask the free live feed for the last few hours of each contract and say, in plain English, what came back."""
+    import pandas as pd
+
+    from tradingdesk.data.providers.yahoo import YahooProvider, yahoo_symbol
+    from tradingdesk.data.symbols import active_contracts
+
+    s = _settings(args)
+    yp = YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    lines = ["## Free live data feed check", "", f"Checked at {now:%Y-%m-%d %H:%M} UTC.", "",
+             "| Contract | Source | Bars (last 2 days) | Latest complete minute | Minutes behind | Last price | Minutes with volume |",
+             "|---|---|---|---|---|---|---|"]
+    ok = 0
+    for root in args.symbols or s.contracts:
+        try:
+            bars = yp.fetch_bars(root, now - pd.Timedelta(days=2), now)
+        except Exception as e:  # report every contract even if one fails
+            lines.append(f"| {root} | error | | | | | {str(e)[:80]} |")
+            continue
+        if bars.empty:
+            lines.append(f"| {root} | nothing returned ({', '.join(yahoo_symbol(c, root) for c in active_contracts(root, now))}, {root}=F) | 0 | | | | |")
+            continue
+        ok += 1
+        for sym, g in bars.groupby("symbol"):
+            last = g.iloc[-1]
+            src = f"{root}=F (rolling)" if root in yp.used_fallback else yahoo_symbol(sym, root)
+            lines.append(f"| {sym} | {src} | {len(g):,} | {last.ts:%a %H:%M} UTC | {(now - last.ts).total_seconds() / 60:.0f} | {last.close:g} | "
+                         f"{(g.volume > 0).mean():.0%} |")
+    lines += ["", f"**{ok} of {len(args.symbols or s.contracts)} contracts returned data.** "
+              "Prices on this free feed are about 10 minutes behind; during the weekend and the daily 5-6 pm ET break no new bars arrive."]
+    md = "\n".join(lines) + "\n"
+    print(md)
+    if args.out:
+        Path(args.out).write_text(md)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="desk", description="Trading desk command line")
     p.add_argument("--config", default=None, help="settings file (default: config/default.yaml)")
@@ -199,6 +237,13 @@ def main(argv: list[str] | None = None) -> int:
     wf.add_argument("--workers", type=int, default=0, help="parallel backtests (default: CPUs - 1)")
     wf.add_argument("--out", default=None)
     wf.set_defaults(func=cmd_walkforward)
+
+    lv = sub.add_parser("live", help="the free delayed live data feed")
+    lsub = lv.add_subparsers(dest="live_cmd", required=True)
+    lc = lsub.add_parser("check", help="fetch recent bars and report what came back")
+    lc.add_argument("--symbols", nargs="+", default=None)
+    lc.add_argument("--out", default=None, help="also write the report to this file")
+    lc.set_defaults(func=cmd_live_check)
 
     args = p.parse_args(argv)
     setup_logging("INFO", None)

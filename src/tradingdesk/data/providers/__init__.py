@@ -9,6 +9,10 @@ def make_provider(settings):
         from tradingdesk.data.providers.synthetic import SyntheticProvider
 
         return SyntheticProvider()
+    if settings.data.provider == "yahoo":
+        from tradingdesk.data.providers.yahoo import YahooProvider
+
+        return YahooProvider()
     from tradingdesk.data.providers.databento_provider import DatabentoProvider
 
     return DatabentoProvider(dataset=settings.data.dataset)

@@ -142,7 +142,7 @@ class Roll(BaseModel):
 
 
 class Data(BaseModel):
-    provider: Literal["databento", "synthetic"] = "databento"
+    provider: Literal["databento", "synthetic", "yahoo"] = "databento"
     dataset: str = "GLBX.MDP3"
     store_path: Path = Path("data")
     default_schema: Literal["ohlcv-1m", "trades"] = "ohlcv-1m"
