@@ -17,7 +17,7 @@ the code can switch it on for you.
 | 3 | Execution Agent, paper trading on live data, Watchdog | ✅ built and tested |
 | 4 | Head trader (Claude) and News & Sentiment agents | ✅ built and tested |
 | 5 | Learning Agent and dashboard | ✅ built and tested |
-| 6 | Cloud server, phone alerts, live-trading readiness | next |
+| 6 | Email alerts, Tradovate connection, live-readiness checklist, server-ready | ✅ built and tested (Tradovate itself not yet tried on a real account) |
 
 The backtests now use the real decision chain: the **Market Regime Agent** reads the market, the **Scanner**
 finds setups that suit it, and the **Risk Manager** can approve, shrink or veto every trade. Nothing has been
@@ -172,6 +172,67 @@ If GitHub won't let the workflow open the pull request itself, the run page give
 click. To let it open them directly: **Settings → Actions → General → Allow GitHub Actions to create and approve pull
 requests**.
 
+## Alerts, Tradovate and the road to live trading (Phase 6)
+
+### Email alerts
+
+New trades, closed trades, limit hits and system problems are emailed to you, plus a summary after each trading
+day (5 pm New York time). Without email set up they keep going to the status issue as before.
+
+1. Use a Gmail address to send from (yours is fine). It needs 2-step verification switched on
+   (myaccount.google.com → Security).
+2. Create an **app password**: myaccount.google.com → search "App passwords" → name it "Trading desk" →
+   **Create**. Copy the 16-letter password it shows.
+3. In this repository: **Settings → Secrets and variables → Actions → New repository secret**, three times:
+   - `ALERT_EMAIL_TO`: the address alerts should go to
+   - `SMTP_USERNAME`: the Gmail address from step 1
+   - `SMTP_PASSWORD`: the app password from step 2
+4. **Actions → Send test email → Run workflow.** You should get a test email within a minute.
+
+### Connecting Tradovate (when you have an account)
+
+The desk can mirror every trade at Tradovate: same contracts and sizes, with a **real stop order held at the broker**
+so positions stay protected even if the desk goes offline. A separate safety net watches the real account's value
+and closes everything if it is down more than the daily limit. Start with a **demo** (practice money) account.
+
+1. Open a Tradovate demo account, then get API access in Tradovate (**Settings → API Access**; Tradovate may
+   charge for API access and for market data, so check their current terms). Create an API key and note its
+   **client id (cid)** and **secret**.
+2. Add these repository secrets: `TRADOVATE_USERNAME`, `TRADOVATE_PASSWORD`, `TRADOVATE_CID`, `TRADOVATE_SECRET`
+   (and optionally `TRADOVATE_APP_ID`, `TRADOVATE_APP_VERSION`).
+3. **Actions → Check Tradovate → Run workflow** (demo). It only reads: login, accounts, balance, positions, orders,
+   contracts and real-time prices. Nothing is placed or cancelled.
+4. In `config/default.yaml` set `broker.name: tradovate`. With `dry_run: true` (the default) it writes down every
+   order it *would* send, on the status page and in alerts, and sends nothing. You can do this today, before having
+   an account, to see exactly what it would do.
+5. When that looks right, set `dry_run: false` to send real orders to the **demo** account.
+
+### Ready for real money?
+
+The status page and dashboard show a **live-readiness checklist**, measured from the desk's own records:
+- **Track record:** 8+ weeks and 50+ trades of paper trading.
+- **Profitable paper results:** average above 0R per trade, profit factor at least 1.2.
+- **Drawdown:** the worst drop is under 10%.
+- **Real history:** the edge holds on held-back market history.
+- **System health:** two weeks with no system alerts.
+- **Demo broker:** two clean weeks mirroring on a Tradovate demo account.
+- **Real-time prices.**
+- **Its own server,** updating every minute.
+- **Email alerts** working.
+- **Kill switch** off.
+
+Live mode stays locked until every item passes: real orders are refused and you're alerted. Even then nothing goes
+live by itself. Going live means you setting, in the settings file, `mode: live`, `broker.environment: live`,
+`broker.dry_run: false` and `paper.data_provider: tradovate`, with your live Tradovate secrets.
+
+### Moving to a server (later, before live money)
+
+GitHub runs the desk every 15 minutes, which is fine for paper trading. Live trading needs an update every minute,
+which means a small always-on server, about $5 a month. The desk is packaged for it: the `Dockerfile` runs
+`desk run`, one update a minute, using the same secrets as environment variables and a persistent folder
+for the paper account. Railway or Render can deploy it straight from this repository; ask and it will be walked
+through step by step.
+
 ## Settings
 
 All limits live in [`config/default.yaml`](config/default.yaml), with a comment on every line. The main ones:
@@ -197,6 +258,9 @@ All limits live in [`config/default.yaml`](config/default.yaml), with a comment 
 | `reasoning.when_unavailable` | rules | no key / over budget: rules = trade anyway, skip = no trade |
 | `news.max_pause_minutes` | 60 | longest pause the news desk may call for breaking news |
 | `risk.shock_pause` | 6x / 15 min | sudden-move guard |
+| `broker.name` | sim | sim = paper only; tradovate = also mirror trades at Tradovate |
+| `broker.environment` | demo | demo = practice money; live = real money (needs mode: live) |
+| `broker.dry_run` | true | write down orders instead of sending them |
 | `sessions.entry_windows` | all | trade any time a good setup appears |
 | `costs.commission_per_side` | 0.85 | per contract, all fees included |
 

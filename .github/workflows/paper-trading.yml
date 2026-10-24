@@ -2,8 +2,8 @@
 #
 # It runs by itself every 15 minutes while the futures market is open (Sunday evening to Friday evening).
 # Each run fetches new prices, replays the desk over everything recorded since paper trading started, runs the
-# Watchdog and updates the "Paper trading desk" issue (Issues tab). Trades and alerts are posted there as
-# comments, so GitHub notifies you by email or the mobile app.
+# Watchdog and updates the "Paper trading desk" issue (Issues tab). Trades and alerts are emailed to you if email
+# alerts are set up; otherwise they're posted on that issue as comments, and GitHub notifies you.
 #
 # The dashboard (a web page with charts) is rebuilt every run and published with GitHub Pages about once an hour,
 # and whenever there's news. It needs Pages switched on once: Settings -> Pages -> Source: GitHub Actions.
@@ -39,13 +39,22 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional: turns on the head trader and news reading
+      ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}         # optional: email alerts (see README)
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      TRADOVATE_USERNAME: ${{ secrets.TRADOVATE_USERNAME }}
+      TRADOVATE_PASSWORD: ${{ secrets.TRADOVATE_PASSWORD }}
+      TRADOVATE_APP_ID: ${{ secrets.TRADOVATE_APP_ID }}
+      TRADOVATE_APP_VERSION: ${{ secrets.TRADOVATE_APP_VERSION }}
+      TRADOVATE_CID: ${{ secrets.TRADOVATE_CID }}
+      TRADOVATE_SECRET: ${{ secrets.TRADOVATE_SECRET }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[live,ai]"
+      - run: pip install -e ".[live,ai,tradovate]"
       - name: Load the paper account
         if: ${{ !inputs.reset }}
         uses: actions/cache/restore@v4

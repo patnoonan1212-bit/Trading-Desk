@@ -22,7 +22,7 @@ def _num(x):
 
 def build_data(*, now, started, equity, start_equity, day_start_equity, open_risk, positions, equity_curve: pd.Series,
                closed: pd.DataFrame, reviews: dict, checks, news_snapshot, upcoming, spend: dict, learning: dict | None,
-               health: str, reviews_count: dict | None = None) -> dict:
+               health: str, reviews_count: dict | None = None, readiness: list | None = None) -> dict:
     curve = equity_curve.sort_index()
     if len(curve) > 2000:  # keep the page light: hourly points are plenty for the chart
         curve = curve.resample("1h").last().dropna()
@@ -45,7 +45,7 @@ def build_data(*, now, started, equity, start_equity, day_start_equity, open_ris
         "curve": [[int(pd.Timestamp(t).timestamp() * 1000), _num(v)] for t, v in curve.items()],
         "trades": trades[-200:], "by_setup": by_setup,
         "checks": [{"name": c.name, "status": c.status, "message": c.message} for c in checks],
-        "news": news_snapshot, "upcoming": upcoming, "spend": spend, "learning": learning or {}, "reviews_count": reviews_count or {},
+        "news": news_snapshot, "upcoming": upcoming, "spend": spend, "learning": learning or {}, "reviews_count": reviews_count or {}, "readiness": readiness or [],
     }
 
 
@@ -171,6 +171,11 @@ ul.plain { margin: 6px 0 0; padding-left: 18px; }
       <div class="tablewrap" id="checks"></div>
     </section>
   </div>
+
+  <section class="card">
+    <h2>Ready for real money?</h2>
+    <div id="ready"></div>
+  </section>
 
   <section class="card">
     <h2>What the desk is learning</h2>
@@ -410,6 +415,17 @@ table($("checks"), [{label: "Status", get: r => statusBadge(r.status)}, {label: 
   box.append(el("h2", {style: "margin-top:14px"}, "Scheduled releases, next 24 hours"));
   if (D.upcoming.length) { const ul = el("ul", {class: "plain"}); D.upcoming.forEach(u => ul.append(el("li", {}, fmtTime(u.ts) + " · " + u.event))); box.append(ul); }
   else box.append(el("p", {class: "empty"}, "None."));
+})();
+
+// ----- live readiness -----
+(function ready() {
+  const box = $("ready"), items = D.readiness || [];
+  if (!items.length) { box.append(el("p", {class: "empty"}, "Checklist appears after the next update.")); return; }
+  const done = items.filter(i => i.passed).length;
+  box.append(el("p", {}, `${done} of ${items.length} checks passed. Real-money trading stays locked until all pass, and then it is still your decision.`));
+  const wrap = el("div", {class: "tablewrap"}); box.append(wrap);
+  table(wrap, [{label: "Status", get: i => statusBadge(i.passed ? "ok" : "warning", i.passed ? "Passed" : "Not yet")},
+               {label: "Check", get: i => i.name}, {label: "Where it stands", get: i => i.detail}], items, "");
 })();
 
 // ----- learning -----

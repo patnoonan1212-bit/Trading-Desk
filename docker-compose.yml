@@ -1,10 +1,13 @@
-# docker compose run --rm desk backtest --synthetic --start 2024-01-01 --end 2024-04-01
+# Run the desk continuously on your own machine or server:   docker compose up -d
+# One-off commands:   docker compose run --rm desk backtest --synthetic --start 2024-01-01 --end 2024-04-01
 services:
   desk:
     build: .
     env_file: .env
+    restart: unless-stopped
     volumes:
+      - ./paper-state:/app/paper-state
       - ./data:/app/data
-      - ./reports:/app/reports
       - ./logs:/app/logs
       - ./config:/app/config
+      - ./learning:/app/learning

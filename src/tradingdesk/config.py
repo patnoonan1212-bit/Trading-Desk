@@ -167,11 +167,22 @@ class Logging(BaseModel):
 class Paper(BaseModel):
     """Paper trading on live prices."""
 
-    data_provider: Literal["yahoo", "synthetic"] = "yahoo"
+    data_provider: Literal["yahoo", "tradovate", "synthetic"] = "yahoo"
     state_path: Path = Path("paper-state")
     warmup_days: int = Field(29, ge=1)   # history fetched on the first run so indicators are ready from the start
     notify: Literal["trades", "alerts", "none"] = "trades"
     learning_file: Path = Path("learning/latest.json")   # the latest learning review, shown on the dashboard
+
+
+class Broker(BaseModel):
+    """Where orders go. sim = simulated fills only. tradovate = the desk's trades are also mirrored at Tradovate."""
+
+    name: Literal["sim", "tradovate"] = "sim"
+    environment: Literal["demo", "live"] = "demo"   # demo = Tradovate practice money; live = real money (needs mode: live)
+    dry_run: bool = True                            # true = write down the orders it would send, send nothing
+    account: str = ""                               # Tradovate account name; blank = the first account
+    entry_window_minutes: int = Field(20, ge=1)     # only enter at the broker if the desk's entry is this recent
+    max_entry_slip_r: float = Field(0.5, ge=0)      # ... and price hasn't run more than this many R past the entry
 
 
 class Reasoning(BaseModel):
@@ -218,6 +229,7 @@ class Settings(BaseModel):
     data: Data
     logging: Logging = Logging()
     paper: Paper = Paper()
+    broker: Broker = Broker()
     reasoning: Reasoning = Reasoning()
     news: News = News()
     watchdog: Watchdog = Watchdog()
@@ -235,8 +247,14 @@ class Settings(BaseModel):
     @model_validator(mode="after")
     def _live_needs_credentials(self) -> Settings:
         # Going live must be a deliberate act: the flag in the file AND broker credentials in the environment.
+        if self.broker.environment == "live" and self.mode != "live":
+            raise ValueError("broker.environment is 'live' but mode is not 'live'. Real-money orders need both, set by you.")
         if self.mode == "live":
-            missing = [k for k in ("TRADOVATE_USERNAME", "TRADOVATE_PASSWORD") if not os.environ.get(k)]
+            if self.broker.name != "tradovate" or self.broker.environment != "live":
+                raise ValueError("mode is 'live' but broker is not Tradovate live. Set broker.name: tradovate and broker.environment: live.")
+            if self.paper.data_provider != "tradovate":
+                raise ValueError("mode is 'live' but prices come from the free delayed feed. Set paper.data_provider: tradovate.")
+            missing = [k for k in ("TRADOVATE_USERNAME", "TRADOVATE_PASSWORD", "TRADOVATE_CID", "TRADOVATE_SECRET") if not os.environ.get(k)]
             if missing:
                 raise ValueError(f"mode is 'live' but these environment variables are missing: {missing}")
         return self

@@ -35,11 +35,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from tradingdesk import readiness
 from tradingdesk.agents.news import NewsAgent, http_get
 from tradingdesk.agents.reasoning import Overseer
 from tradingdesk.agents.risk import RiskManager
 from tradingdesk.agents.scanner import ScannerAgent
 from tradingdesk.agents.watchdog import Check, Watchdog
+from tradingdesk.alerts import EmailAlerter, plain
 from tradingdesk.backtest.engine import Backtester
 from tradingdesk.backtest.metrics import summarize, trades_frame
 from tradingdesk.calendar import EconomicCalendar
@@ -77,11 +79,14 @@ class TickResult:
     checks: list[Check] = field(default_factory=list)
     status_md: str = ""
     notify_md: str = ""
+    mirror: object = None
+    readiness: list = field(default_factory=list)
     equity: float = 0.0
 
 
 class PaperTrader:
-    def __init__(self, settings: Settings, provider: HistoricalProvider | None = None, claude: Claude | None = None, http=None) -> None:
+    def __init__(self, settings: Settings, provider: HistoricalProvider | None = None, claude: Claude | None = None, http=None,
+                 alerter: EmailAlerter | None = None, broker_client=None) -> None:
         self.s = settings
         self.dir = Path(settings.paper.state_path)
         self.store = DataStore(self.dir / "data")
@@ -90,6 +95,10 @@ class PaperTrader:
                 from tradingdesk.data.providers.synthetic import SyntheticProvider
 
                 provider = SyntheticProvider()
+            elif settings.paper.data_provider == "tradovate":
+                from tradingdesk.brokers.tradovate import TradovateClient, TradovateMarketData
+
+                provider = TradovateMarketData(TradovateClient(settings.broker.environment))
             else:
                 from tradingdesk.data.providers.yahoo import YahooProvider
 
@@ -98,6 +107,8 @@ class PaperTrader:
         self.watchdog = Watchdog(settings)
         self.claude = claude or Claude(settings.reasoning.monthly_budget_usd, SpendLedger(self.dir / "claude_spend.json"))
         self.news = NewsAgent(settings, self.dir, self.claude, http or http_get)
+        self.alerter = alerter or EmailAlerter()
+        self.broker_client = broker_client
 
     # ----- state files ---------------------------------------------------------------------------------
     def _state(self) -> dict:
@@ -178,7 +189,28 @@ class PaperTrader:
             res.equity = self.s.account.starting_equity
             closed = pd.DataFrame()
 
-        # 3. Journal
+        # 3. Broker: copy the twin's positions and stops to Tradovate (or, in a dry run, write down what would be sent).
+        res.mirror = None
+        st["run_times"] = (st.get("run_times", []) + [now.isoformat()])[-3000:]
+        res.readiness = readiness.evaluate(self.s, self.dir, now, self.alerter.configured, st)
+        if self.s.broker.name == "tradovate" and engine is not None:
+            from tradingdesk.live.mirror import BrokerMirror
+
+            mirror_settings = self.s
+            if self.s.mode == "live" and not readiness.ready(res.readiness):
+                # Live mode is set, but the checklist hasn't passed: keep everything in dry run and say why.
+                missing = [i.name for i in res.readiness if not i.passed]
+                res.checks.append(Check("live lock", "alert", "mode is live, but the live-readiness checklist hasn't passed "
+                                        f"({', '.join(missing)}). No real orders were sent."))
+                mirror_settings = self.s.model_copy(deep=True)
+                mirror_settings.broker.dry_run = True
+            res.mirror = BrokerMirror(mirror_settings, self.dir, self.broker_client).sync(engine, data, now)
+            res.checks.append(self.watchdog.broker(res.mirror, self.s))
+            with open(self.dir / "broker_log.jsonl", "a") as f:
+                for a in res.mirror.actions + res.mirror.skipped + res.mirror.problems:
+                    f.write(json.dumps({"ts": now.isoformat(), "text": a}) + "\n")
+
+        # 4. Journal
         journal = self._journal()
         announced = {j["key"] for j in journal}
         replayed = {decision_key(d) for d in decisions}
@@ -192,11 +224,24 @@ class PaperTrader:
                 for d in res.new:
                     f.write(json.dumps({"key": decision_key(d), "announced_at": now.isoformat(), **d.to_dict()}, default=str) + "\n")
 
-        # 4. Pages
-        res.status_md = self._status(res, engine, gate, closed, started, calendar)
+        # 5. Alerts: by email when it's set up; otherwise (or if sending fails) notify.md goes on the status issue.
         res.notify_md = self._notify(res, engine, closed)
+        summary = self._daily_summary(st, now, res, closed, gate)
+        outbox = "\n".join(x for x in (res.notify_md, summary) if x)
+        sent = False
+        if outbox and self.alerter.configured:
+            urgent = any(c.status == "alert" for c in res.checks) or "🛑" in res.notify_md
+            subject = ("🚨 Trading desk needs attention" if urgent else "Trading desk: end-of-day summary" if summary and not res.notify_md
+                       else "Trading desk update")
+            sent = self.alerter.send(f"{subject} (paper, equity ${res.equity:,.0f})", plain(outbox) + self._links())
+        res.checks.append(self.watchdog.alerts(self.alerter, bool(outbox), sent))
+        if any(c.status == "alert" for c in res.checks):
+            st["alert_times"] = (st.get("alert_times", []) + [now.isoformat()])[-500:]
+
+        # 6. Pages
+        res.status_md = self._status(res, engine, gate, closed, started, calendar)
         (self.dir / "status.md").write_text(res.status_md)
-        (self.dir / "notify.md").write_text(res.notify_md)
+        (self.dir / "notify.md").write_text("" if sent else outbox)
         self._dashboard(res, engine, gate, closed, started, calendar, result.equity if engine else pd.Series(dtype=float))
         if data:
             st["last_bar"] = max(c.index[-1] for c in data.values()).isoformat()
@@ -229,6 +274,47 @@ class PaperTrader:
     def started_at(self) -> pd.Timestamp | None:
         st = self._state()
         return pd.Timestamp(st["started_at"]) if "started_at" in st else None
+
+    # ----- alerts ----------------------------------------------------------------------------------------
+    @staticmethod
+    def _links() -> str:
+        import os
+
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        if not repo:
+            return ""
+        owner, name = repo.split("/", 1)
+        return f"\n\nDashboard: https://{owner}.github.io/{name}/\nStatus page: https://github.com/{repo}/issues?q=label%3Apaper-trading\n"
+
+    def _daily_summary(self, st: dict, now: pd.Timestamp, res: TickResult, closed: pd.DataFrame, gate) -> str:
+        """Once per trading day, after the 5 pm New York close: how the day went."""
+        et = now.tz_convert(ET)
+        day = f"{et:%Y-%m-%d}"
+        day_start = st.get("day_start", {})
+        if day_start.get("day") != day and et.hour < 17:
+            st["day_start"] = {"day": day, "equity": res.equity}
+            day_start = st["day_start"]
+        if et.weekday() >= 5 or et.hour < 17 or st.get("summary_day") == day:
+            return ""
+        st["summary_day"] = day
+        start_eq = day_start.get("equity", res.equity) if day_start.get("day") == day else res.equity
+        pnl = res.equity - start_eq
+        lines = [f"**End of day {et:%A %d %B}**", "",
+                 f"- Equity ${res.equity:,.0f}, {'up' if pnl >= 0 else 'down'} ${abs(pnl):,.0f} today ({pnl / max(start_eq, 1) * 100:+.2f}%)."]
+        today = pd.DataFrame()
+        if len(closed):
+            ct = pd.to_datetime(closed["closed_at"], utc=True).dt.tz_convert(ET)
+            today = closed[(ct.dt.strftime("%Y-%m-%d") == day)]
+        if len(today):
+            lines.append(f"- {len(today)} trade(s) closed: " + "; ".join(
+                f"{r.symbol} {r.direction} {str(r.setup).replace('_', ' ')} {'+' if r.net_pnl >= 0 else '-'}${abs(r.net_pnl):,.0f}"
+                for r in today.itertuples()) + ".")
+        else:
+            lines.append("- No trades closed today.")
+        problems = [c for c in res.checks if c.status != "ok"]
+        lines.append("- System health: " + ("all normal." if not problems else "; ".join(f"{c.name}: {c.message}" for c in problems[:4])))
+        lines.append(f"- Claude spending this month: ${self.claude.ledger.spent():.2f} of ${self.s.reasoning.monthly_budget_usd:.0f}.")
+        return "\n".join(lines) + "\n"
 
     # ----- writing ---------------------------------------------------------------------------------------
     def _dashboard(self, res: TickResult, engine, gate, closed, started, calendar, equity: pd.Series) -> None:
@@ -266,7 +352,8 @@ class PaperTrader:
             upcoming=[{"ts": t.isoformat(), "event": n} for t, n in (calendar.upcoming(res.now, 24) if calendar is not None else [])],
             spend={"spent": ledger.spent(), "reviews": ledger.spent("reviews"), "news": ledger.spent("news"),
                    "budget": self.s.reasoning.monthly_budget_usd, "connected": self.claude.available},
-            learning=learning, health=worst, reviews_count=counts)
+            learning=learning, health=worst, reviews_count=counts,
+            readiness=[{"name": i.name, "passed": i.passed, "detail": i.detail} for i in res.readiness])
         site = self.dir / "site"
         site.mkdir(parents=True, exist_ok=True)
         (site / "index.html").write_text(dashboard.render(data))
@@ -316,6 +403,8 @@ class PaperTrader:
         spent, cap = self.claude.ledger.spent(), self.s.reasoning.monthly_budget_usd
         md += ["", f"**Claude spending this month:** ${spent:,.2f} of ${cap:,.0f} "
                f"(trade reviews ${self.claude.ledger.spent('reviews'):,.2f}, news ${self.claude.ledger.spent('news'):,.2f})."]
+        if res.readiness:
+            md += ["", "## Ready for real money?", "", readiness.markdown(res.readiness)]
         md += ["", "## Watchdog", "", "| | Check | Detail |", "|---|---|---|"]
         md += [f"| {c.icon} | {c.name} | {c.message} |" for c in res.checks]
         recent = [d for d in self._journal() if (d["agent"], d["action"]) not in QUIET][-15:][::-1]
@@ -347,6 +436,12 @@ class PaperTrader:
                 r = by_id.get(int(d.details.get("trade_id", -1)))
                 tail = f" Net ${r.net_pnl:,.0f} ({r.r:+.2f}R)." if r is not None else ""
                 lines.append(f"📤 {when} **Trade closed, {d.symbol}:** {d.reason}.{tail}")
+        m = getattr(res, "mirror", None)
+        if m is not None:
+            where = f"Tradovate {self.s.broker.environment}" + (" dry run" if self.s.broker.dry_run else "")
+            lines += [f"🏦 **{where}:** {'would ' + a[0].lower() + a[1:] if self.s.broker.dry_run else a}" for a in m.actions] if mode == "trades" else []
+            lines += [f"🏦 **{where}:** {a}" for a in m.skipped]
+            lines += [f"🚨 **{where}:** {a}" for a in m.problems]
         if not lines:
             return ""
         return "\n".join([f"**Paper desk update, {res.now:%a %H:%M} UTC** (equity ${res.equity:,.0f})", ""] + [f"- {x}" for x in lines]) + "\n"

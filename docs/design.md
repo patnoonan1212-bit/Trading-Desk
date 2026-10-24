@@ -186,3 +186,36 @@ database, no outside scripts, nothing to break or keep patched. It follows a tes
 one axis per chart, a blue/red pair only for gains and losses, status colours always paired with an icon and a
 word, a table view behind every chart, and separate colour choices for light and dark mode. GitHub Pages hosts it;
 it is published at most about hourly (more often when there's news) because Pages limits how often a site can update.
+
+# Phase 6
+
+## The broker mirrors a twin instead of being driven trade by trade
+The desk keeps making every decision on its simulated twin, exactly as in paper trading. After each update the
+Execution Agent compares the Tradovate account with the twin and fixes differences: market orders for position
+size, one real stop order per position at the twin's stop. This "make it match" design recovers by itself from
+missed updates, restarts and partial failures, because each update starts from what the broker actually holds.
+Exits and stop moves are always copied; a new entry is only copied while it is fresh (time and price limits),
+otherwise that trade stays paper-only and you are told.
+
+## Protection lives at the broker
+Stops are real orders at Tradovate, sized to what the broker actually holds after market orders fill, so a
+stop can never be larger than the position. If the desk stops running, positions remain protected.
+
+## A safety net that doesn't trust the twin
+The real account's value is read every update. If it falls more than the daily loss limit, regardless of what
+the twin thinks, everything is closed and the mirror stands aside until the next trading day.
+
+## Dry run first, demo second, live last
+Dry run keeps an imaginary broker account so it reports only changes, needs no account, and shows exactly what
+would be sent. Live requires `mode: live`, `broker.environment: live`, Tradovate real-time prices, the Tradovate
+secrets (all checked when settings load) and every item on the readiness checklist (checked every update). A
+live configuration that fails the checklist runs in dry run and raises an alert.
+
+## Email for alerts
+Email (through a Gmail app password) was chosen over chat apps. Alerts fall back to the status issue if email isn't
+set up or a send fails, and a failed send is itself a Watchdog alert.
+
+## Untested against the real Tradovate yet
+The Tradovate client follows Tradovate's published REST and WebSocket API and is tested against a simulated
+Tradovate. It has not run against a real account. The read-only "Check Tradovate" button is the first step once a
+demo account exists, and the checklist requires two clean weeks on demo before live is possible.

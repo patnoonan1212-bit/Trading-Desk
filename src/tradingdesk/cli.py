@@ -10,6 +10,9 @@
     desk paper tick     (one paper-trading update: fetch prices, replay, Watchdog, status page)
     desk learn          --paper-state paper-state --out learning   (weekly learning review)
     desk learn-apply    --report learning/latest.json              (put passed suggestions into the settings file)
+    desk alert-test     (send a test email to check alerts are set up)
+    desk tradovate-check (read-only: log in, show accounts, positions, orders and a few minutes of prices)
+    desk run            --every 60   (on a server: one update every minute, forever)
 """
 
 from __future__ import annotations
@@ -271,6 +274,108 @@ def cmd_learn_apply(args) -> int:
     return 0 if chosen else 3
 
 
+def cmd_alert_test(args) -> int:
+    from tradingdesk.alerts import EmailAlerter
+
+    a = EmailAlerter()
+    ok = a.send("Trading desk: test alert", "This is a test from your trading desk. If you can read this, email alerts work.\n\n"
+                "Real alerts look like this: new trades, closed trades with their result, limit hits, system problems, "
+                "and a summary after each trading day.")
+    print("Test email sent to " + a.to if ok else "Could not send: " + a.last_error)
+    return 0 if ok else 1
+
+
+def cmd_tradovate_check(args) -> int:
+    """Read-only check of the Tradovate connection. Never places, changes or cancels anything."""
+    import pandas as pd
+
+    from tradingdesk.brokers.tradovate import Credentials, TradovateClient, TradovateMarketData, tradovate_symbol
+    from tradingdesk.data.symbols import active_contracts
+
+    s = _settings(args)
+    env = args.environment or s.broker.environment
+    lines = [f"## Tradovate check ({env})", "", "Read-only: nothing was placed, changed or cancelled.", ""]
+    ok = True
+
+    def row(what, good, detail):
+        nonlocal ok
+        ok &= good
+        lines.append(f"| {'✅' if good else '❌'} | {what} | {detail} |")
+
+    lines += ["| | Check | Result |", "|---|---|---|"]
+    missing = Credentials.missing()
+    if missing:
+        row("Login details", False, "missing secrets: " + ", ".join(missing))
+        print("\n".join(lines))
+        return 1
+    c = TradovateClient(env)
+    try:
+        c.login()
+        row("Log in", True, f"token valid until {c.expires}")
+        accts = c.accounts()
+        row("Accounts", bool(accts), ", ".join(a.get("name", "?") for a in accts) or "none found")
+        for a in accts[:3]:
+            bal = c.cash_balance(a["id"])
+            row(f"Balance {a.get('name')}", bool(bal), ", ".join(f"{k}={v}" for k, v in bal.items() if isinstance(v, int | float))[:200])
+        pos = [p for p in c.positions() if p.get("netPos")]
+        row("Open positions", True, "; ".join(f"{p['netPos']} {c.contract_name(p['contractId'])}" for p in pos) or "none")
+        wo = c.working_orders()
+        row("Working orders", True, "; ".join(f"{o['action']} {o['qty']} {o['contract']} {o['type']} {o.get('stopPrice') or o.get('price') or ''}" for o in wo) or "none")
+        now = pd.Timestamp.now(tz="UTC")
+        for root in s.contracts:
+            sym = tradovate_symbol(active_contracts(root, now, 1)[0])
+            r = c.call("GET", f"/contract/find?name={sym}")
+            row(f"Contract {sym}", isinstance(r, dict) and bool(r.get("id")), f"id {r.get('id')}" if isinstance(r, dict) else str(r)[:80])
+    except Exception as e:  # report, don't crash: this is a diagnostic
+        row("Connection", False, str(e)[:200])
+    try:
+        md = TradovateMarketData(c, contracts_per_root=1)
+        now = pd.Timestamp.now(tz="UTC")
+        bars = md.fetch_bars(s.contracts[0], now - pd.Timedelta(days=3), now)
+        last = bars.iloc[-1] if len(bars) else None
+        row("Real-time prices", len(bars) > 0, f"{len(bars)} one-minute bars for {s.contracts[0]}, newest {last.ts:%a %H:%M} UTC at {last.close}"
+            if last is not None else "no bars (market closed, or no market-data subscription on the account)")
+    except Exception as e:
+        row("Real-time prices", False, str(e)[:200])
+    md_text = "\n".join(lines) + "\n"
+    print(md_text)
+    if args.out:
+        Path(args.out).write_text(md_text)
+    return 0 if ok else 1
+
+
+def cmd_run(args) -> int:
+    """Run the desk continuously (on a server). Each update is the same as one GitHub run, just every minute."""
+    import time
+    import traceback
+
+    from tradingdesk.alerts import EmailAlerter
+    from tradingdesk.live.paper import PaperTrader
+
+    s = _settings(args)
+    pt = PaperTrader(s)
+    alerter = EmailAlerter()
+    failures = 0
+    log.info("Desk running: an update every %ss (mode %s, broker %s %s%s).", args.every, s.mode, s.broker.name,
+             s.broker.environment, ", dry run" if s.broker.dry_run else "")
+    while True:
+        began = time.monotonic()
+        try:
+            res = pt.tick()
+            failures = 0
+            log.info("Update done: equity $%s, %d new decision(s).", f"{res.equity:,.0f}", len(res.new))
+        except Exception:  # keep running; tell the owner if it keeps failing
+            failures += 1
+            err = traceback.format_exc()
+            log.error("Update failed (%d in a row):\n%s", failures, err)
+            if failures in (3, 30, 300):
+                alerter.send("🚨 Trading desk: updates are failing",
+                             f"The last {failures} updates failed. Broker stop orders stay in place at Tradovate.\n\n{err[-2000:]}")
+        if args.once:
+            return 0
+        time.sleep(max(1.0, args.every - (time.monotonic() - began)))
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="desk", description="Trading desk command line")
     p.add_argument("--config", default=None, help="settings file (default: config/default.yaml)")
@@ -343,6 +448,19 @@ def main(argv: list[str] | None = None) -> int:
     la.add_argument("--ids", nargs="*", default=None)
     la.add_argument("--body", default="pr-body.md", help="where to write the pull request text")
     la.set_defaults(func=cmd_learn_apply)
+
+    at = sub.add_parser("alert-test", help="send a test alert email")
+    at.set_defaults(func=cmd_alert_test)
+
+    tc = sub.add_parser("tradovate-check", help="read-only check of the Tradovate connection")
+    tc.add_argument("--environment", choices=["demo", "live"], default=None)
+    tc.add_argument("--out", default=None)
+    tc.set_defaults(func=cmd_tradovate_check)
+
+    rn = sub.add_parser("run", help="run continuously on a server: one update every --every seconds")
+    rn.add_argument("--every", type=float, default=60.0)
+    rn.add_argument("--once", action="store_true", help=argparse.SUPPRESS)
+    rn.set_defaults(func=cmd_run)
 
     args = p.parse_args(argv)
     setup_logging("INFO", None)

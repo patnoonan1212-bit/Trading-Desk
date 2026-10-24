@@ -9,6 +9,8 @@
     history       does replaying the recorded prices still give the same decisions that were announced?
     news          are the live calendar and the news feeds answering?
     claude        is the head trader connected, and how much of the month's Claude budget is used?
+    alerts        are email alerts set up, and did the last one go out?
+    broker        does Tradovate match the desk, and is every position protected by a real stop?
 
 Each check comes back as ok, warning or alert. Alerts are posted to you (see paper.notify in the settings).
 """
@@ -155,3 +157,20 @@ class Watchdog:
         if spent >= 0.8 * cap:
             return Check("head trader", "warning", f"${spent:.2f} of the ${cap:.0f} monthly Claude budget used.")
         return Check("head trader", "ok", f"Connected; ${spent:.2f} of the ${cap:.0f} monthly budget used.")
+
+    def alerts(self, alerter, had_news: bool, sent: bool) -> Check:
+        if not alerter.configured:
+            return Check("email alerts", "ok", "Not set up; news is posted on the status issue instead (GitHub emails you about it).")
+        if had_news and not sent:
+            return Check("email alerts", "alert", f"An alert email could not be sent ({alerter.last_error}); it was posted on the status issue instead.")
+        return Check("email alerts", "ok", f"Set up; alerts go to {alerter.to}." + (" Sent one this update." if sent else ""))
+
+    def broker(self, result, settings: Settings) -> Check:
+        b = settings.broker
+        where = f"Tradovate {b.environment}" + (" (dry run)" if b.dry_run else "")
+        if result.problems:
+            return Check("broker", "alert", f"{where}: " + " ".join(result.problems))
+        if result.halted:
+            return Check("broker", "warning", f"{where}: {result.halted}")
+        did = f"{len(result.actions)} order change(s) this update" if result.actions else "already matched the desk"
+        return Check("broker", "ok", f"{where}: {did}.")

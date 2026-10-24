@@ -1,0 +1,32 @@
+# The "Send test email" button: Actions tab -> Send test email -> Run workflow.
+# Checks that email alerts are set up correctly (secrets ALERT_EMAIL_TO, SMTP_USERNAME, SMTP_PASSWORD).
+name: Send test email
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Send
+        run: |
+          if desk alert-test > result.txt 2>&1; then
+            echo "### ✅ $(tail -1 result.txt)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ❌ $(tail -1 result.txt)" >> "$GITHUB_STEP_SUMMARY"
+            echo "Check the three secrets in Settings -> Secrets and variables -> Actions. SMTP_PASSWORD must be a Gmail app password." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Test email not sent::$(tail -1 result.txt)"
+            exit 1
+          fi

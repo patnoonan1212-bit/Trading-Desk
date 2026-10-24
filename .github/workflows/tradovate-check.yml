@@ -1,0 +1,38 @@
+# The "Check Tradovate" button: Actions tab -> Check Tradovate -> Run workflow.
+# Read-only: logs in, lists accounts, balances, positions and orders, looks up the contracts and fetches a few minutes
+# of real-time prices. It never places, changes or cancels an order. Needs the TRADOVATE_* secrets (see README).
+name: Check Tradovate
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which Tradovate server"
+        type: choice
+        options: [demo, live]
+        default: demo
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TRADOVATE_USERNAME: ${{ secrets.TRADOVATE_USERNAME }}
+      TRADOVATE_PASSWORD: ${{ secrets.TRADOVATE_PASSWORD }}
+      TRADOVATE_APP_ID: ${{ secrets.TRADOVATE_APP_ID }}
+      TRADOVATE_APP_VERSION: ${{ secrets.TRADOVATE_APP_VERSION }}
+      TRADOVATE_CID: ${{ secrets.TRADOVATE_CID }}
+      TRADOVATE_SECRET: ${{ secrets.TRADOVATE_SECRET }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[tradovate]"
+      - name: Check
+        run: |
+          desk tradovate-check --environment ${{ inputs.environment }} --out check.md; code=$?
+          cat check.md >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Tradovate check::$(grep -E '^\| (✅|❌)' check.md | sed ':a;N;$!ba;s/\n/%0A/g')"
+          exit $code

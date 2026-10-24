@@ -115,6 +115,18 @@ paper:
   warmup_days: 29                 # history loaded on the first run so indicators are ready immediately
   notify: trades                  # trades: post when trades open/close and on alerts | alerts: alerts only | none
 
+# Broker (Phase 6). sim: trades are simulated only (paper trading). tradovate: every trade the desk makes is also
+# mirrored at Tradovate, with real stop orders held at the broker. Start with environment: demo (practice money) and
+# dry_run: true (it only writes down what it would send). Real money needs mode: live AND environment: live AND
+# the live-readiness checklist passing; nothing can switch that on for you.
+broker:
+  name: sim
+  environment: demo
+  dry_run: true
+  account: ""                     # Tradovate account name; blank = your first account
+  entry_window_minutes: 20        # only copy an entry to the broker if the desk entered this recently
+  max_entry_slip_r: 0.5           # ... and price hasn't run more than half the risk past the entry
+
 # Head trader (Phase 4): Claude reviews every trade idea that passed the Scanner and the Risk Manager, with the
 # chart, news, calendar and account in front of it. It can approve, make the trade smaller, or veto it. It can never
 # make a trade bigger or loosen a stop, and the Risk Manager's limits still apply. Paper and live only: it is not
