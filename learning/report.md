@@ -1,6 +1,6 @@
 # Learning review
 
-_Saturday 2026-10-24 14:39 UTC_
+_Saturday 2026-10-31 14:43 UTC_
 
 Nothing to learn from yet: no closed trades in paper trading and no downloaded history.
 
@@ -16,4 +16,6 @@ Nothing yet: no group has enough trades with a clear enough result.
 
 ## The head trader (Claude)
 
-No trades reviewed by Claude yet.
+Claude reviewed 1 trade ideas: approved 0, made 0 smaller, passed on 1.
+The 1 it passed on would have made -0.0R under the rules (0 winners).
+Paper account $50,000 vs $49,978 with the rules alone: Claude has added $22 so far, before its own fees. Too few reviews to judge yet.

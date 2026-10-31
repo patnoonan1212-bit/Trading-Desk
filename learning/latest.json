@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-24T14:39:24.353559+00:00",
+ "generated": "2026-10-31T14:43:15.470179+00:00",
  "sources": [],
  "trades": 0,
  "min_trades": 30,
@@ -7,6 +7,28 @@
  "exits": {},
  "proposals": [],
  "baseline": {},
- "head_trader": {},
+ "head_trader": {
+  "reviewed": 1,
+  "approved": 0,
+  "reduced": 0,
+  "rejected": 1,
+  "rejected_rules_r": -0.03,
+  "rejected_rules_wins": 0,
+  "rejected_known": 1,
+  "dollars_saved": 22.5,
+  "paper_equity": 50000.0,
+  "rules_only_equity": 49977.5,
+  "decisions": [
+   {
+    "action": "rejected",
+    "symbol": "MCL",
+    "ts": "2026-10-30 20:14:00+00:00",
+    "reason": "It is Friday 16:14, and crude futures close for the weekend at 17:00. The trade would have to rally about $2 to its target in 46 minutes, or else be held through a weekend of Hormuz headlines, where a Monday gap could blow straight past a stop only 43 cents away. The 'sweep' is also weak: price closed just 3 cents back above the old low after a steady afternoon selloff, so the reversal isn't confi",
+    "rules_r": -0.03,
+    "rules_pnl": -22.5,
+    "factor": null
+   }
+  ]
+ },
  "test_from": null
 }
