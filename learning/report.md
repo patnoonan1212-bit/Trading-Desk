@@ -1,8 +1,8 @@
 # Learning review
 
-_Saturday 2026-11-07 14:48 UTC_
+_Saturday 2026-11-14 14:50 UTC_
 
-**Based on 16 trades:** 16 closed paper trades.
+**Based on 42 trades:** 42 closed paper trades.
 A group needs 30+ trades before it counts; fewer is mostly luck.
 
 ## Suggested changes
@@ -17,11 +17,11 @@ Nothing yet: no group has enough trades with a clear enough result.
 
 ## Exits
 
-- 12% of trades got at least 1R in our favour at some point, 12% reached 2R.
-- 10 were stopped out; 44% of those reached the target afterwards.
+- 38% of trades got at least 1R in our favour at some point, 33% reached 2R.
+- 21 were stopped out; 30% of those reached the target afterwards.
 
 ## The head trader (Claude)
 
-Claude reviewed 35 trade ideas: approved 0, made 24 smaller, passed on 11.
-The 5 it passed on would have made -2.2R under the rules (0 winners).
-Paper account $48,799 vs $45,851 with the rules alone: Claude has added $2,948 so far, before its own fees. 
+Claude reviewed 65 trade ideas: approved 1, made 49 smaller, passed on 15.
+The 9 it passed on would have made -4.9R under the rules (0 winners).
+Paper account $53,609 vs $46,896 with the rules alone: Claude has added $6,713 so far, before its own fees. 

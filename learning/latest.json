@@ -1,255 +1,246 @@
 {
- "generated": "2026-11-07T14:48:53.924362+00:00",
+ "generated": "2026-11-14T14:50:53.157439+00:00",
  "sources": [
-  "16 closed paper trades"
+  "42 closed paper trades"
  ],
- "trades": 16,
+ "trades": 42,
  "min_trades": 30,
  "groups": [],
  "exits": {
-  "trades": 16,
-  "stopped_out": 10,
-  "stopped_then_target_pct": 0.4444444444444444,
-  "reached_1r_pct": 0.125,
-  "reached_2r_pct": 0.125,
-  "avg_mfe_r": 0.904375,
-  "avg_r": -0.19456249999999997
+  "trades": 42,
+  "stopped_out": 21,
+  "stopped_then_target_pct": 0.3,
+  "reached_1r_pct": 0.38095238095238093,
+  "reached_2r_pct": 0.3333333333333333,
+  "avg_mfe_r": 2.4547619047619045,
+  "avg_r": 0.22054761904761908
  },
  "proposals": [],
  "baseline": {},
  "head_trader": {
-  "reviewed": 35,
-  "approved": 0,
-  "reduced": 24,
-  "rejected": 11,
-  "rejected_rules_r": -2.23,
+  "reviewed": 65,
+  "approved": 1,
+  "reduced": 49,
+  "rejected": 15,
+  "rejected_rules_r": -4.91,
   "rejected_rules_wins": 0,
-  "rejected_known": 5,
-  "dollars_saved": 2327.88,
-  "paper_equity": 48798.95,
-  "rules_only_equity": 45851.25,
+  "rejected_known": 9,
+  "dollars_saved": 1899.26,
+  "paper_equity": 53609.2,
+  "rules_only_equity": 46895.9,
   "decisions": [
    {
+    "action": "rejected",
+    "symbol": "MGC",
+    "ts": "2026-11-09 01:29:00+00:00",
+    "reason": "The 'high' that got swept was only set 15 minutes earlier, during a sharp, heavy-volume rally from 4062 to 4121. Shorting that is fading strong momentum rather than reversing a real level, and the $8.70 stop is smaller than a typical bar's range right now. The desk's last 9 liquidity sweep trades all lost, so I'd skip this one.",
+    "rules_r": -0.823,
+    "rules_pnl": -283.1,
+    "factor": null
+   },
+   {
     "action": "reduced",
     "symbol": "MNQ",
-    "ts": "2026-11-02 07:44:00+00:00",
-    "reason": "The breakdown is real on good volume, but we would be selling right into tonight's low around 28710-28720, where buyers stepped in twice on Sunday evening, and the overnight news (peace hopes, lower oil, AI headlines) leans bullish for tech. With two losses already today, take it at half size.",
-    "rules_r": -0.85,
-    "rules_pnl": -633.3,
+    "ts": "2026-11-09 02:44:00+00:00",
+    "reason": "The bearish Nvidia news and the failed push above 27310 support a short. But price just rallied about 400 points in under two hours, and the 60-point stop is smaller than many recent 15-minute bars, so ordinary noise could hit it. With a marginal score and this desk's last 9 liquidity-sweep trades all losing, take it at half size.",
+    "rules_r": 2.542,
+    "rules_pnl": 868.6,
     "factor": 0.5
    },
    {
     "action": "reduced",
     "symbol": "MCL",
-    "ts": "2026-11-02 08:14:00+00:00",
-    "reason": "The direction makes sense: oil is trending down, volume backs the break, and the peace-deal news supports a short. But price is sitting right on the overnight low of 100.16, and the 02:30 bar already faked a breakdown and spiked back to 101.07, above our 100.92 stop. With two losses today and a single strike headline able to whip oil higher, take it at half size.",
-    "rules_r": 3.795,
-    "rules_pnl": 2814.0,
+    "ts": "2026-11-09 06:59:00+00:00",
+    "reason": "The bounce bar is decent, but this long fights a news-driven selloff: oil dropped about $1.90 in two hours after Trump signaled no new attacks on Iran. The 91.81 target also sits above tonight's 91.42 high, so a full trip back to it is optimistic, and I'm taking it at half size.",
+    "rules_r": -0.943,
+    "rules_pnl": -328.5,
     "factor": 0.5
-   },
-   {
-    "action": "reduced",
-    "symbol": "MGC",
-    "ts": "2026-11-02 08:29:00+00:00",
-    "reason": "The breakdown is barely below the band, and price is sitting right on overnight support around 3900\u20133902, which has already held twice tonight, so this could easily turn into another bounce inside the range. The short also stacks onto the desk's existing oil short, both betting on Iran peace headlines, and comes after two losses today, so take it at half size.",
-    "rules_r": -0.855,
-    "rules_pnl": -633.5,
-    "factor": 0.5
-   },
-   {
-    "action": "reduced",
-    "symbol": "MGC",
-    "ts": "2026-11-03 00:59:00+00:00",
-    "reason": "The breakout is real on strong volume, but the 19:30 bar spiked to 3974.6 and was sold straight back down. Price is now pushing into the same 3974-3976 ceiling that capped it this afternoon, and tomorrow's election makes the overnight session less predictable, so take it at half size.",
-    "rules_r": -0.243,
-    "rules_pnl": -189.4,
-    "factor": 0.5
-   },
-   {
-    "action": "reduced",
-    "symbol": "MGC",
-    "ts": "2026-11-03 04:14:00+00:00",
-    "reason": "The sweep-and-reclaim is real, but gold has slid about 40 points in the last hour on heavy selling even after a war headline that should have helped it, and the reclaim bar is weak. The stop is only about 6 points away in a jumpy, news-driven market, and the target asks for a full return to the session high, so take it at half size.",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": 0.5
-   },
-   {
-    "action": "rejected",
-    "symbol": "MES",
-    "ts": "2026-11-03 04:14:00+00:00",
-    "reason": "This is a barely-qualifying buy against a steady overnight slide that started with the reported US strike on Iran and a Nasdaq selloff. The 'sweep' only dipped 1.75 points on light volume and closed right at the old low, so it doesn't show buyers taking control. It also doubles our exposure to the same risk as the open crude short: further escalation would push oil up and stocks down, hurting both",
-    "rules_r": -0.209,
-    "rules_pnl": -161.55,
-    "factor": null
-   },
-   {
-    "action": "reduced",
-    "symbol": "MES",
-    "ts": "2026-11-03 05:44:00+00:00",
-    "reason": "The stop-run below 7561.50 on heavy volume is a real sweep, but the bar closed barely back above the level. This long fights a steady six-hour slide of lower highs and a bearish backdrop (Nasdaq correction, Iran strike), and the 7594.75 target sits above the whole evening's high. With the account already down on the day, take it at half size.",
-    "rules_r": -0.975,
-    "rules_pnl": -743.9,
-    "factor": 0.5
-   },
-   {
-    "action": "reduced",
-    "symbol": "MGC",
-    "ts": "2026-11-03 05:44:00+00:00",
-    "reason": "The sweep below 3930 and the snap back on heavy volume is a real reversal signal, and the Iran news supports gold. But gold has made lower highs for four hours and kept falling even after the strike headline, and the target is the session high with congestion around 3950-3960 in the way. With a middling score and the account already down on the day, take it at half size.",
-    "rules_r": -0.188,
-    "rules_pnl": -143.4,
-    "factor": 0.5
-   },
-   {
-    "action": "rejected",
-    "symbol": "MCL",
-    "ts": "2026-11-03 06:14:00+00:00",
-    "reason": "This is a short in oil while a fresh US strike near the Strait of Hormuz is pushing oil higher, and price has been climbing steadily for three hours. The 'sweep' only poked 2 cents above a high set 15 minutes earlier, and an 18-cent stop is very tight for this volatility. With the account already down 1.6% today, two losses in a row, and no wins on the last three sweep trades, this is not a fight ",
-    "rules_r": -0.276,
-    "rules_pnl": -207.0,
-    "factor": null
-   },
-   {
-    "action": "reduced",
-    "symbol": "MGC",
-    "ts": "2026-11-03 06:14:00+00:00",
-    "reason": "Gold has fallen steadily for six hours despite bullish safe-haven news. This 'sweep' poked less than a point below the low and closed mid-range, and the 00:30 sweep already failed, so the stop is only about one bar's normal range away. With the account down 1.6% today, two straight losses and a cold streak on this setup, take it at half size for the large reward if the bounce holds.",
-    "rules_r": -0.953,
-    "rules_pnl": -714.3,
-    "factor": 0.5
-   },
-   {
-    "action": "rejected",
-    "symbol": "MCL",
-    "ts": "2026-11-03 06:29:00+00:00",
-    "reason": "This bets against oil just hours after a reported US strike near the Strait of Hormuz. Price has climbed steadily from about 96.40 to 97.60 with higher lows, so the 'trending down' label doesn't fit right now, and one more headline could easily blow through a stop only 31 cents away. With the account already down 1.77% today, two losses in a row and our last three sweep trades all losers, a margin",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": null
-   },
-   {
-    "action": "rejected",
-    "symbol": "MES",
-    "ts": "2026-11-03 06:35:00+00:00",
-    "reason": "This is a second try at a long that just got stopped out. MES has ground steadily lower all night with lower highs and lower lows, and the latest bar closed at 7559.50, below the 7562.75 'reclaim' level, so the re-entry signal isn't confirmed. The target needs price to undo the whole overnight decline against bearish news (tech selloff, US strike on Iran), and with the account already down 1.28% t",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": null
    },
    {
     "action": "reduced",
     "symbol": "MCL",
-    "ts": "2026-11-04 01:29:00+00:00",
-    "reason": "The breakdown is real: a failed push to 97.16 was followed by a heavy-volume drop. But we would be selling at the very low of a sharp bar, just above the 95.75\u201395.80 support that held twice today, including the 18:30 flush that was bought straight back. With election-night volatility and bullish oil supply news, take it at half size until that floor actually breaks.",
-    "rules_r": null,
-    "rules_pnl": null,
+    "ts": "2026-11-09 08:44:00+00:00",
+    "reason": "This buys against a news-driven overnight slide in oil, from 91.3 to 89.3 on heavy selling volume. The 'sweep' only poked 3 cents under the low and closed mid-bar, and this desk's last 10 sweep trades won just once. The repeated hold around 89.30\u201389.40 gives a tight, sensible stop, so take it at half size rather than skip it.",
+    "rules_r": -0.972,
+    "rules_pnl": -336.2,
     "factor": 0.5
-   },
-   {
-    "action": "rejected",
-    "symbol": "MGC",
-    "ts": "2026-11-04 06:44:00+00:00",
-    "reason": "This bets against a strong gold rally that has a clear driver: about 90 points in an hour on safe-haven buying after the election results. The 'sweep' was only 0.70 above the prior high, with a close barely below it, which is not enough evidence that buyers are done. On top of that, the desk's last four liquidity-sweep trades all lost, two of them in gold, so we skip shorting momentum while the ne",
-    "rules_r": -0.867,
-    "rules_pnl": -638.2,
-    "factor": null
    },
    {
     "action": "reduced",
     "symbol": "MES",
-    "ts": "2026-11-04 08:29:00+00:00",
-    "reason": "The 'high' that got swept was set only 15 minutes earlier, inside a steady overnight rally of about 130 points that has kept grinding up despite the bearish election headlines. Shorting against that trend is shaky, and this desk's last four sweep trades all lost, so we take it at half size. The bearish news backdrop and the tight stop keep it worth a smaller try.",
-    "rules_r": -0.968,
-    "rules_pnl": -693.6,
+    "ts": "2026-11-09 11:29:00+00:00",
+    "reason": "The breakout came on strong volume, but the market has already rallied about 64 points off the 02:45 low. The breakout bar also gave back roughly half its push, rejected from 7458.75 and closing near 7449. With Nvidia down 4-5% premarket and the news desk leaning bearish on the S&P, I'll take it at half size rather than skip it.",
+    "rules_r": 4.231,
+    "rules_pnl": 1452.4,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MGC",
+    "ts": "2026-11-09 11:59:00+00:00",
+    "reason": "Fading the push into 4117-4122 makes sense: that area is where gold broke down overnight, and the stop sits above the 06:30 high. But the setup is marginal (score 52), our last two mean-reversion trades lost, and the stop is only about one bar's range wide. Also, the 06:15 jump came on heavy volume right after a hawkish Iran headline, while stocks are falling, so there may be real safe-haven buyin",
+    "rules_r": -0.945,
+    "rules_pnl": -323.8,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MCL",
+    "ts": "2026-11-09 13:14:00+00:00",
+    "reason": "The 'sweep' only dipped one cent under the low set by the bar just before it, during a heavy-volume selloff from 90.5. It looks more like a pause in a falling market than a real reversal, and the target needs price to retrace the entire morning drop. With this desk's sweep trades winning only 1 of the last 10 and two MCL losses already today, take it at half size.",
+    "rules_r": -0.911,
+    "rules_pnl": -310.8,
     "factor": 0.5
    },
    {
     "action": "reduced",
     "symbol": "MNQ",
-    "ts": "2026-11-04 08:29:00+00:00",
-    "reason": "The sweep looks clean: price poked above 28385, got rejected and closed near the bar's low, and the bearish tech news supports a short. But this fades a strong 800-point overnight rally that has shrugged off that same news, and the desk's last four sweep trades all lost, so take it at half size.",
-    "rules_r": -0.889,
-    "rules_pnl": -212.2,
-    "factor": 0.5
-   },
-   {
-    "action": "reduced",
-    "symbol": "MES",
-    "ts": "2026-11-04 11:44:00+00:00",
-    "reason": "The market has already run about 120 points since 1am, and this 'breakout' clears the 5:30 high by only half a point. That 5:30 bar was rejected on the heaviest volume of the night. Add the extreme Hormuz tanker headline and an account already down 1.1% today after two straight losses, and I'll take it at half size rather than full.",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": 0.5
-   },
-   {
-    "action": "rejected",
-    "symbol": "MES",
-    "ts": "2026-11-04 11:59:00+00:00",
-    "reason": "This short fights a steady, strong rally of about 120 points since 1am, and the 'sweep' is weak: price poked only 1.75 points above the prior high and closed right near it, with a very tight stop in a high-volatility market. The market has kept rising even after the bearish Hormuz news, the desk is 0 for 6 on this setup type, and today is already down 1.1% after two straight losses, so this is not",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": null
-   },
-   {
-    "action": "rejected",
-    "symbol": "MGC",
-    "ts": "2026-11-04 12:44:00+00:00",
-    "reason": "This shorts gold against an uptrend while falling yields, a weaker dollar and Hormuz tensions are pushing it higher. The 07:30 bar also only fell back to the middle of the morning's range rather than truly rejecting the high. With the account already down 1.1% today, two losses in a row and the last six sweep trades all losers, a counter-trend sweep at a modest 58 score isn't worth the risk.",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": null
-   },
-   {
-    "action": "reduced",
-    "symbol": "MES",
-    "ts": "2026-11-04 14:29:00+00:00",
-    "reason": "The stop-run above 7688.75 is real, but it is a weak one: the bar closed only 9 points off its high, against a strong overnight rally on rising volume, and the stock market's cash open is one minute away, when a 12-point stop can be hit in seconds. Add that we are already down 1.1% today after two straight losses, and this setup type has lost the desk's last six times, so we take it at half size r",
-    "rules_r": null,
-    "rules_pnl": null,
+    "ts": "2026-11-10 02:14:00+00:00",
+    "reason": "The pullback setup is reasonable and the existing MES long already has its stop locked in profit, so the added stock-index exposure is acceptable. However, the target sits about 400 points away, well above tonight's choppy 27930-28130 range, so the trade will very likely still be open when tomorrow morning's inflation report hits, and that report can gap price straight through the stop. Half size ",
+    "rules_r": -0.704,
+    "rules_pnl": -246.7,
     "factor": 0.5
    },
    {
     "action": "reduced",
     "symbol": "MGC",
-    "ts": "2026-11-04 23:59:00+00:00",
-    "reason": "The sweep above 4081 and the close back below it is a real signal, and the softer safe-haven mood supports a short. But this bets against an hourly uptrend on a borderline 54 score, using a setup that has lost on all of its last 7 trades. The target also sits well below today's 4066-4081 range, so I'd take it at half size.",
-    "rules_r": -0.854,
-    "rules_pnl": -300.1,
+    "ts": "2026-11-10 03:14:00+00:00",
+    "reason": "Gold has slid steadily from about 4150 to 4120 tonight, and the bounce off the lower band is weak so far: a small, light-volume bar right after a heavy selling bar. The stop is only about 5 points away while recent 15-minute bars swing 7 to 15 points, so ordinary noise could hit it, and our last three mean-reversion trades all lost. The 7.5:1 payoff is worth a try, but at half size.",
+    "rules_r": 0.693,
+    "rules_pnl": 241.5,
     "factor": 0.5
    },
    {
     "action": "reduced",
-    "symbol": "MES",
-    "ts": "2026-11-05 10:14:00+00:00",
-    "reason": "Price has climbed steadily all night from about 7691 to a fresh high of 7727 on a strong bar. This short fades that climb with a stop only about 2 points above the high, so ordinary noise could take it out, and the target needs the whole overnight rally to unwind. With the account 4.7% off its high after a string of losses, take it at half size rather than full.",
-    "rules_r": -0.263,
-    "rules_pnl": -91.8,
-    "factor": 0.5
-   },
-   {
-    "action": "rejected",
     "symbol": "MNQ",
-    "ts": "2026-11-05 10:59:00+00:00",
-    "reason": "The 'sweep' is weak: price poked only 3 points above the prior high and closed back near the same level, in the middle of a steady climb from 28167. That is not a clear rejection, and a borderline score of 51 doesn't make up for it. This setup has also lost on its last 8 tries on this desk, and today already has two losses in a row, so this is a day to stay patient and skip it.",
-    "rules_r": -0.852,
-    "rules_pnl": -296.8,
-    "factor": null
+    "ts": "2026-11-10 04:58:00+00:00",
+    "reason": "The setup is valid with a sensible stop under tonight's 27869 low, but the 15m chart has made lower highs since 19:00, and the trade stacks on our existing MES long, which is the same stock-market bet. The far-off target likely won't be reached before tomorrow's 8:30 inflation report, so take it at half size given the desk's recent losing run.",
+    "rules_r": -0.737,
+    "rules_pnl": -257.2,
+    "factor": 0.5
    },
    {
     "action": "reduced",
-    "symbol": "MGC",
-    "ts": "2026-11-05 10:59:00+00:00",
-    "reason": "Gold has chopped sideways between roughly 4124 and 4143 for five hours on fading volume, so this buy sits right under the range ceiling (4140-4144) rather than at a clean pullback low, and the stop sits inside the range, not below its 4124 floor. The trend and 4.8:1 payoff justify taking it, but with the account on two straight losses today, five losing trades in a row and 4.9% below its high, hal",
-    "rules_r": -0.091,
-    "rules_pnl": -31.7,
+    "symbol": "MCL",
+    "ts": "2026-11-10 07:44:00+00:00",
+    "reason": "The downtrend and the bearish oil news support this short, but the breakout bar already dipped to 84.80 and bounced back to 85.13 on heavy volume. That is the second time in an hour buyers have defended the 85.1 area, so it may not follow through. With the trade likely still open into the 08:30 CPI release and our last two oil trades both losers, take it at half size.",
+    "rules_r": -0.801,
+    "rules_pnl": -280.8,
     "factor": 0.5
    },
    {
     "action": "reduced",
     "symbol": "MGC",
-    "ts": "2026-11-06 03:14:00+00:00",
-    "reason": "The chart supports the short: gold has made lower highs all evening and just broke the 20-bar low on heavy selling. But the score is barely above the minimum, the news desk leans bullish on gold as a safe haven during the stock sell-off, the last five trades all lost, and a trade aiming that far will likely still be open into Friday morning's jobs report, so take it at half size.",
+    "ts": "2026-11-10 09:59:00+00:00",
+    "reason": "The 'sweep' is of a low set only 30 minutes earlier, in the middle of a sharp, heavy-volume selloff, so it is not a real level. The first objective needs gold to fully recover the drop back to the overnight high. This desk's last 10 sweep trades have also lost on average, and CPI at 08:30 could reprice gold before the target is reached, so take it at half size.",
+    "rules_r": -0.799,
+    "rules_pnl": -281.1,
+    "factor": 0.5
+   },
+   {
+    "action": "rejected",
+    "symbol": "MES",
+    "ts": "2026-11-10 12:59:00+00:00",
+    "reason": "CPI comes out at 8:30, about half an hour after entry, and the news is leaning bearish on stocks after Waller raised the idea of a half-point Fed hike. Taking a long here is a coin-flip bet on the inflation number, not a pullback trade. On top of that, the account is already down 2% today after two straight losses, the desk already holds a long MNQ that moves with MES, and the last three pullback ",
+    "rules_r": -0.17,
+    "rules_pnl": -58.4,
+    "factor": null
+   },
+   {
+    "action": "reduced",
+    "symbol": "MES",
+    "ts": "2026-11-11 01:14:00+00:00",
+    "reason": "The sweep is real: price poked above 7572.50 on double the usual overnight volume and closed well back below it, and the news leans bearish. But this shorts a market that climbed steadily all day, the 7493 target sits below where the rally began, and this desk has won only 1 of its last 10 sweep trades, so take it at half size.",
+    "rules_r": -0.125,
+    "rules_pnl": -42.95,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MNQ",
+    "ts": "2026-11-11 01:14:00+00:00",
+    "reason": "The sweep looks real: a high-volume spike above 28021 was pushed back below it, the stop sits beyond the spike high, and the news leans bearish for tech. But this short fights a steady climb of about 400 points since this afternoon, the target sits below where the whole move started, and our last 10 sweep trades produced only 1 winner while the account is 4.6% off its high, so take it at half size",
+    "rules_r": -0.824,
+    "rules_pnl": -282.4,
+    "factor": 0.5
+   },
+   {
+    "action": "approved",
+    "symbol": "MGC",
+    "ts": "2026-11-11 01:14:00+00:00",
+    "reason": "The evening bounce stalled near 4050 and the latest 15-minute bar sold off hard on more than double the normal volume, closing at its low. That fits the hourly downtrend and the bearish news on gold from rising yields, there is no scheduled data ahead, and the stop sits above the session high. The recent pullback losses are a small sample and the account is flat today, so take it at full size, acc",
+    "rules_r": null,
+    "rules_pnl": null,
+    "factor": null
+   },
+   {
+    "action": "reduced",
+    "symbol": "MGC",
+    "ts": "2026-11-11 00:59:00+00:00",
+    "reason": "The bigger picture and the news both lean bearish for gold, and the stop sits sensibly above tonight's 4050 high. But the 15-minute chart has climbed steadily since 13:00, and price is entering the 4033-4040 zone where it stalled for hours this afternoon, with a distant target and a 0-for-4 recent pullback record, so we take it at half size.",
+    "rules_r": null,
+    "rules_pnl": null,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MGC",
+    "ts": "2026-11-12 01:44:00+00:00",
+    "reason": "The stop above the 4005.90 high makes sense, but the bars argue against a clean downtrend: gold just bounced hard from 3973.60 to 4005.90 on heavy volume. The 3929.70 target is far below anything traded today, and the 3973 low sits in the way at about 1.5R. With pullback trades losing lately and a tech selloff that could add a small safe-haven bid for gold, take it at half size.",
+    "rules_r": 2.65,
+    "rules_pnl": 889.3,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MCL",
+    "ts": "2026-11-12 04:58:00+00:00",
+    "reason": "Oil has stepped steadily lower all evening, from 86.50 to 85.30, and the bounce off the sweep is weak (the last bar closed near its low), so this is a marginal 54-score reversal with a stop only about 12 cents below the low, where normal swings could easily hit it. On top of that, our last 10 liquidity-sweep trades produced just one winner, so we take it at half size rather than skip it, since the",
+    "rules_r": 3.099,
+    "rules_pnl": 1042.3,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MES",
+    "ts": "2026-11-12 09:44:00+00:00",
+    "reason": "The breakout has decent volume, but price is sitting right at the overnight high (about 7619\u20137620) in a choppy, low-volatility market, and the 40-point target is a long way off. A decision from Nvidia's board on its CEO could land at any time and would likely hit the index hard, so we take the trade at half size.",
+    "rules_r": -0.865,
+    "rules_pnl": -299.75,
+    "factor": 0.5
+   },
+   {
+    "action": "rejected",
+    "symbol": "MES",
+    "ts": "2026-11-12 12:12:00+00:00",
+    "reason": "This is a re-entry on a breakout that has already failed once today. The recent bars do not support it: price has faded from 7620 back to about 7608 on the heaviest volume of the last hour, putting it back inside the overnight range. With bearish Nvidia news weighing on the index, a quiet ranging market, and only 1 winner in the desk's last 5 squeeze breakouts, a 40-point run to target looks unlik",
+    "rules_r": -0.875,
+    "rules_pnl": -301.0,
+    "factor": null
+   },
+   {
+    "action": "reduced",
+    "symbol": "MES",
+    "ts": "2026-11-12 13:29:00+00:00",
+    "reason": "The 'low' that was swept is only the bottom of the 8:00 bar, which fell sharply on very heavy volume. It is not a tested support level, and buying here goes against the bearish Nvidia news. The target asks for a full recovery of that drop. With the desk's sweep trades breaking even at best and the account already up 3.25% today, take it at half size to protect the gain.",
+    "rules_r": 1.71,
+    "rules_pnl": 589.45,
+    "factor": 0.5
+   },
+   {
+    "action": "rejected",
+    "symbol": "MCL",
+    "ts": "2026-11-12 13:29:00+00:00",
+    "reason": "At 08:00 oil swung about $2.50 on roughly ten times normal volume, and our news read is from 02:54, so we don't know what caused it. The 'swept high' is just that half-hour-old spike, and the 8:30 inflation data lands a minute from now, so the next hour is too unpredictable to fade an unexplained move. Our recent liquidity-sweep trades are about break-even and the account is up 3.25% today, so we ",
+    "rules_r": -0.803,
+    "rules_pnl": -276.8,
+    "factor": null
+   },
+   {
+    "action": "reduced",
+    "symbol": "MNQ",
+    "ts": "2026-11-12 16:29:00+00:00",
+    "reason": "The short has support: Nasdaq ran about 600 points in two hours, the last bar was rejected from its high on lighter volume, the Nvidia news is bearish, and it partly hedges our long MES, whose stop already locks in profit. But this is fading a strong one-way rally on a day the system calls 'ranging', and our recent mean-reversion trades have lost money, so take it at half size.",
     "rules_r": null,
     "rules_pnl": null,
     "factor": 0.5
@@ -257,47 +248,56 @@
    {
     "action": "reduced",
     "symbol": "MCL",
-    "ts": "2026-11-06 08:59:00+00:00",
-    "reason": "The 'swept low' at 89.56 was set only 15 minutes earlier in the middle of a heavy, one-way selloff from 91.65, so this is more like catching a falling knife than a reversal from real structure, and oil is on track for a 12% weekly loss. The desk has also lost its last 8 sweep trades and is 5% off its high, so we take it at half size.",
-    "rules_r": -0.789,
-    "rules_pnl": -272.8,
-    "factor": 0.5
-   },
-   {
-    "action": "rejected",
-    "symbol": "MGC",
-    "ts": "2026-11-06 09:29:00+00:00",
-    "reason": "This asks us to short gold right after a strong, steady rally from about 4052 to 4091. The 'sweep' only poked 0.8 points above the prior high and closed barely below it, which is not a real rejection, and the news (US-Iran tension, weak stocks) favors gold rising. Add a low score, a desk record of 0 winners in its last 9 sweep trades, and an account already down today, and this is a marginal fade ",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": null
-   },
-   {
-    "action": "reduced",
-    "symbol": "MGC",
-    "ts": "2026-11-06 14:44:00+00:00",
-    "reason": "Gold has been falling steadily since the hot jobs report, so this buy goes against a fresh, news-driven downtrend. The stop at 4036.57 also sits above the 4032 low already hit at 8:30, so it is not truly beyond the day's real low, and the 4116 target is far away through several levels where sellers stepped in this morning. The bounce on heavy volume is a real sign of buyers, but with the account 5",
+    "ts": "2026-11-12 20:14:00+00:00",
+    "reason": "This short bets against a steady all-day rally in oil (about $86.2 to $89) that is backed by bullish Iran and supply news, and the 'sweep' above 89.09 was only 5 cents with a weak close back below. The fading volume on the push higher and the tight stop make it worth a try, but the desk's liquidity-sweep record is mediocre (+0.16R average), so take half size on a good day rather than give back gai",
     "rules_r": null,
     "rules_pnl": null,
     "factor": 0.5
    },
    {
     "action": "reduced",
-    "symbol": "MNQ",
-    "ts": "2026-11-06 17:44:00+00:00",
-    "reason": "The short fits the bearish tech backdrop, but MNQ has chopped back and forth across VWAP all session. The entry also comes after a big down bar that already tagged the 27005\u201327040 lows from this morning and overnight, so it sells straight into support. With the desk's last five closed trades all losers and a far-off target on a Friday afternoon, half size is the prudent way to take it.",
-    "rules_r": null,
-    "rules_pnl": null,
-    "factor": 0.5
-   },
-   {
-    "action": "rejected",
     "symbol": "MCL",
-    "ts": "2026-11-06 18:14:00+00:00",
-    "reason": "This desk's last 9 liquidity-sweep trades all lost, including a recent MCL sweep, and this one looks weak too: the bar that swept the low still closed down near its lows, oil has been making lower highs since 11:15, and the news desk leans bearish on crude. The target is the day's high, a full trip across the range on a Friday afternoon, and a 51 score isn't strong enough to bet on that.",
+    "ts": "2026-11-13 06:59:00+00:00",
+    "reason": "The breakout is real: an orderly climb, rising volume, and a stop below the 88.34 low. But the latest bar was pushed back from 89.19 to close right at the breakout level, and our last five squeeze breakouts have roughly broken even. A 90.53 target is also a long way to travel in quiet overnight crude, so take it at three-quarter size.",
     "rules_r": null,
     "rules_pnl": null,
-    "factor": null
+    "factor": 0.75
+   },
+   {
+    "action": "reduced",
+    "symbol": "MES",
+    "ts": "2026-11-13 08:44:00+00:00",
+    "reason": "The sweep below 7600 is real, but the reclaim is weak: the bar closed only about 3 points back above the level, in the middle of its range. That comes after a steady overnight slide of lower highs from 7640, so buyers have not yet shown they are in control. The 7648.75 target also sits above the overnight high in a choppy, quiet market, so take the trade at three-quarter size.",
+    "rules_r": 2.338,
+    "rules_pnl": 815.15,
+    "factor": 0.75
+   },
+   {
+    "action": "reduced",
+    "symbol": "MGC",
+    "ts": "2026-11-13 10:29:00+00:00",
+    "reason": "Gold has mostly moved sideways between about 3892 and 3910 for four hours since the 00:45 drop. This short is entered mid-range on light volume, and the 3852 target needs a clean break of the 3892-3895 lows first. The bearish news and a sensible stop above the range highs support taking it, but our pullback trades have barely broken even lately, so half size.",
+    "rules_r": 0.557,
+    "rules_pnl": 194.9,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MCL",
+    "ts": "2026-11-13 14:59:00+00:00",
+    "reason": "Oil's weak weekly backdrop supports a short, and the poke above 89.52 that failed fits the setup. But this fades a strong, high-volume rally since 8:30 in an hourly uptrend, the rejection bar closed mid-range rather than near its low, and the stop sits only 9 cents above the spike high, so take it at half size.",
+    "rules_r": null,
+    "rules_pnl": null,
+    "factor": 0.5
+   },
+   {
+    "action": "reduced",
+    "symbol": "MGC",
+    "ts": "2026-11-13 14:59:00+00:00",
+    "reason": "The bearish case for gold is sound, but the market has been chopping between about 3890 and 3910 all morning, and the stop sits just below the 3905\u20133910 highs that have been tested repeatedly. The first target is also far beyond today's 3876 low. On top of that, the desk is already short Nasdaq on the same Fed-hike theme, so half size protects today's gains.",
+    "rules_r": null,
+    "rules_pnl": null,
+    "factor": 0.5
    }
   ]
  },
